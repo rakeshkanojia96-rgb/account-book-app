@@ -216,7 +216,8 @@ function Sales() {
 
   const handleEdit = (sale) => {
     setFormData({
-      date: sale.date,
+      // Ensure date is in yyyy-MM-dd format for the date input
+      date: sale.date ? format(new Date(sale.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       invoice_number: sale.invoice_number || '',
       order_id: sale.order_id || '',
       customer_name: sale.customer_name || '',

@@ -154,7 +154,8 @@ function Purchases() {
 
   const handleEdit = (purchase) => {
     setFormData({
-      date: purchase.date,
+      // Ensure date is in yyyy-MM-dd format for the date input
+      date: purchase.date ? format(new Date(purchase.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       invoice_number: purchase.invoice_number || '',
       supplier_name: purchase.supplier_name || '',
       category: purchase.category || 'Raw Material',
