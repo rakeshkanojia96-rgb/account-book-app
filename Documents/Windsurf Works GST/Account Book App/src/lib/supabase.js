@@ -5,6 +5,140 @@ import { neon } from '@neondatabase/serverless'
 
 const sql = import.meta.env.DATABASE_URL ? neon(import.meta.env.DATABASE_URL) : null
 
+// Query builder that supports method chaining
+class QueryBuilder {
+  constructor(table) {
+    this.table = table
+    this.queryType = 'select'
+    this.columns = '*'
+    this.whereConditions = []
+    this.orderByClause = null
+    this.limitValue = null
+    this.insertData = null
+    this.updateData = null
+  }
+
+  select(columns = '*') {
+    this.queryType = 'select'
+    this.columns = columns
+    return this
+  }
+
+  eq(column, value) {
+    this.whereConditions.push({ column, operator: '=', value })
+    return this
+  }
+
+  gte(column, value) {
+    this.whereConditions.push({ column, operator: '>=', value })
+    return this
+  }
+
+  lte(column, value) {
+    this.whereConditions.push({ column, operator: '<=', value })
+    return this
+  }
+
+  order(column, options = {}) {
+    const direction = options.ascending ? 'ASC' : 'DESC'
+    this.orderByClause = `${column} ${direction}`
+    return this
+  }
+
+  limit(count) {
+    this.limitValue = count
+    return this
+  }
+
+  single() {
+    this.singleRow = true
+    return this
+  }
+
+  async execute() {
+    try {
+      if (!sql) throw new Error('Database not configured')
+
+      let query = ''
+      let params = []
+
+      if (this.queryType === 'select') {
+        query = `SELECT ${this.columns} FROM ${this.table}`
+        
+        if (this.whereConditions.length > 0) {
+          const whereClause = this.whereConditions.map((cond, i) => {
+            params.push(cond.value)
+            return `${cond.column} ${cond.operator} $${params.length}`
+          }).join(' AND ')
+          query += ` WHERE ${whereClause}`
+        }
+        
+        if (this.orderByClause) {
+          query += ` ORDER BY ${this.orderByClause}`
+        }
+        
+        if (this.limitValue) {
+          query += ` LIMIT ${this.limitValue}`
+        }
+      } else if (this.queryType === 'insert') {
+        const columns = Object.keys(this.insertData)
+        const values = Object.values(this.insertData)
+        params = values
+        
+        const columnNames = columns.join(', ')
+        const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ')
+        
+        query = `INSERT INTO ${this.table} (${columnNames}) VALUES (${placeholders}) RETURNING *`
+      } else if (this.queryType === 'update') {
+        const updates = Object.keys(this.updateData).map((key, i) => {
+          params.push(this.updateData[key])
+          return `${key} = $${params.length}`
+        }).join(', ')
+        
+        query = `UPDATE ${this.table} SET ${updates}`
+        
+        if (this.whereConditions.length > 0) {
+          const whereClause = this.whereConditions.map((cond) => {
+            params.push(cond.value)
+            return `${cond.column} ${cond.operator} $${params.length}`
+          }).join(' AND ')
+          query += ` WHERE ${whereClause}`
+        }
+        
+        query += ' RETURNING *'
+      } else if (this.queryType === 'delete') {
+        query = `DELETE FROM ${this.table}`
+        
+        if (this.whereConditions.length > 0) {
+          const whereClause = this.whereConditions.map((cond) => {
+            params.push(cond.value)
+            return `${cond.column} ${cond.operator} $${params.length}`
+          }).join(' AND ')
+          query += ` WHERE ${whereClause}`
+        }
+        
+        query += ' RETURNING *'
+      }
+
+      const result = await sql(query, params)
+      
+      if (this.singleRow) {
+        return { data: result[0] || null, error: null }
+      }
+      
+      return { data: result, error: null }
+    } catch (error) {
+      console.error('Database query error:', error)
+      return { data: null, error }
+    }
+  }
+
+  // Make the builder awaitable
+  then(resolve, reject) {
+    return this.execute().then(resolve, reject)
+  }
+}
+
 // Supabase-compatible API wrapper
 export const supabase = {
   auth: {
@@ -16,96 +150,31 @@ export const supabase = {
   },
 
   from(table) {
+    const builder = new QueryBuilder(table)
+    
     return {
-      async select(columns = '*') {
-        return {
-          eq: async (column, value) => {
-            try {
-              if (!sql) throw new Error('Database not configured')
-              const result = await sql`SELECT * FROM ${sql(table)} WHERE ${sql(column)} = ${value}`
-              return { data: result, error: null }
-            } catch (error) {
-              return { data: null, error }
-            }
-          },
-          gte: async (column, value) => {
-            try {
-              if (!sql) throw new Error('Database not configured')
-              const result = await sql`SELECT * FROM ${sql(table)} WHERE ${sql(column)} >= ${value}`
-              return { data: result, error: null }
-            } catch (error) {
-              return { data: null, error }
-            }
-          },
-          lte: async (column, value) => {
-            try {
-              if (!sql) throw new Error('Database not configured')
-              const result = await sql`SELECT * FROM ${sql(table)} WHERE ${sql(column)} <= ${value}`
-              return { data: result, error: null }
-            } catch (error) {
-              return { data: null, error }
-            }
-          }
-        }
-      },
 
-      async insert(data) {
-        try {
-          if (!sql) throw new Error('Database not configured')
-          const columns = Object.keys(data)
-          const values = Object.values(data)
-          
-          // Build INSERT query dynamically
-          const columnNames = columns.join(', ')
-          const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ')
-          
-          const result = await sql(`
-            INSERT INTO ${table} (${columnNames})
-            VALUES (${placeholders})
-            RETURNING *
-          `, values)
-          
-          return { data: result, error: null }
-        } catch (error) {
-          return { data: null, error }
-        }
+      select: (columns = '*') => {
+        builder.queryType = 'select'
+        builder.columns = columns
+        return builder
       },
-
-      async update(data) {
-        return {
-          eq: async (column, value) => {
-            try {
-              if (!sql) throw new Error('Database not configured')
-              const updates = Object.keys(data).map((key, i) => `${key} = $${i + 1}`).join(', ')
-              const values = [...Object.values(data), value]
-              
-              const result = await sql(`
-                UPDATE ${table}
-                SET ${updates}
-                WHERE ${column} = $${values.length}
-                RETURNING *
-              `, values)
-              
-              return { data: result, error: null }
-            } catch (error) {
-              return { data: null, error }
-            }
-          }
-        }
+      
+      insert: (data) => {
+        builder.queryType = 'insert'
+        builder.insertData = data
+        return builder
       },
-
-      async delete() {
-        return {
-          eq: async (column, value) => {
-            try {
-              if (!sql) throw new Error('Database not configured')
-              const result = await sql(`DELETE FROM ${table} WHERE ${column} = $1 RETURNING *`, [value])
-              return { data: result, error: null }
-            } catch (error) {
-              return { data: null, error }
-            }
-          }
-        }
+      
+      update: (data) => {
+        builder.queryType = 'update'
+        builder.updateData = data
+        return builder
+      },
+      
+      delete: () => {
+        builder.queryType = 'delete'
+        return builder
       }
     }
   }
