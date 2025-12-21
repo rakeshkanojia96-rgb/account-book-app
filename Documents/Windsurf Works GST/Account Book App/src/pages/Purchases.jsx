@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Edit2, Trash2, X, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 
 function Purchases() {
+  const { user } = useUser()
   const [purchases, setPurchases] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -46,7 +48,8 @@ function Purchases() {
 
   const fetchPurchases = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('purchases')
         .select('*')
@@ -66,7 +69,10 @@ function Purchases() {
     e.preventDefault()
     
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in to save purchases')
+        return
+      }
       
       if (editingId) {
         const { error } = await supabase
@@ -190,7 +196,10 @@ function Purchases() {
     if (!confirm('Are you sure you want to delete this purchase? Stock will be reduced.')) return
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in to delete purchases')
+        return
+      }
       
       // Get purchase details before deleting
       const { data: purchase, error: fetchError } = await supabase
