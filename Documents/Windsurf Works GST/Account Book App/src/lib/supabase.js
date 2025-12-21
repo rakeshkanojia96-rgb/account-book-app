@@ -3,7 +3,11 @@
 
 import { neon } from '@neondatabase/serverless'
 
-const sql = import.meta.env.DATABASE_URL ? neon(import.meta.env.DATABASE_URL) : null
+// Vite only exposes env vars prefixed with VITE_ to the browser, so we
+// primarily read from VITE_DATABASE_URL. DATABASE_URL is kept as a fallback
+// for environments where it may still be injected.
+const connectionString = import.meta.env.VITE_DATABASE_URL || import.meta.env.DATABASE_URL
+const sql = connectionString ? neon(connectionString) : null
 
 // Query builder that supports method chaining
 class QueryBuilder {
