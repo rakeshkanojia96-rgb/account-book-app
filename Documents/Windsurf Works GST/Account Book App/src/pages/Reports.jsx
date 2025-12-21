@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Download, FileText, Calendar } from 'lucide-react'
 import { format, startOfYear, endOfYear } from 'date-fns'
@@ -7,7 +8,8 @@ import 'jspdf-autotable'
 import { useFinancialYearStore } from '../store/financialYearStore'
 
 function Reports() {
-  const [loading, setLoading] = useState(true)
+  const { user } = useUser()
+  const [loading, setLoading] = useState(false)
   const [reportType, setReportType] = useState('profit-loss')
   const { financialYear, setFinancialYear, financialYears } = useFinancialYearStore()
   const [reportData, setReportData] = useState({
@@ -29,7 +31,7 @@ function Reports() {
 
   const fetchReportData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
       
       // Get FY dates from store
       const fyDates = useFinancialYearStore.getState().getFinancialYearDates(financialYear)
@@ -83,7 +85,6 @@ function Reports() {
 
   const exportToPDF = () => {
     const doc = new jsPDF()
-    const { data: { user } } = supabase.auth.getUser()
     
     doc.setFontSize(18)
     doc.text(reportType === 'profit-loss' ? 'Profit & Loss Statement' : 'Balance Sheet', 14, 20)

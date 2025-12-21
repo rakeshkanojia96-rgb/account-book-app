@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Edit2, Trash2, X, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 
 function Expenses() {
+  const { user } = useUser()
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -26,7 +28,8 @@ function Expenses() {
 
   const fetchExpenses = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
@@ -46,7 +49,10 @@ function Expenses() {
     e.preventDefault()
     
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in')
+        return
+      }
       
       if (editingId) {
         const { error } = await supabase

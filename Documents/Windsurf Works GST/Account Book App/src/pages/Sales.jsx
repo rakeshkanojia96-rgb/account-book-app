@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Download, Edit2, Trash2, X, Calendar, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 
 function Sales() {
+  const { user } = useUser()
   const [sales, setSales] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -92,7 +94,8 @@ function Sales() {
 
   const fetchSales = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('sales')
         .select('*')
@@ -110,7 +113,8 @@ function Sales() {
 
   const fetchExpenseCategories = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('expense_categories')
         .select('*')
@@ -129,7 +133,10 @@ function Sales() {
     e.preventDefault()
     
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in to save sales')
+        return
+      }
       
       if (editingId) {
         const { error } = await supabase
@@ -269,7 +276,10 @@ function Sales() {
     if (!confirm('Are you sure you want to delete this sale? Stock will be added back.')) return
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in to delete sales')
+        return
+      }
       
       // Get sale details before deleting
       const { data: sale, error: fetchError } = await supabase

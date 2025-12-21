@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Edit2, Trash2, X, Laptop, Copy } from 'lucide-react'
 import { format, differenceInMonths } from 'date-fns'
 
 function Assets() {
+  const { user } = useUser()
   const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -72,7 +74,8 @@ function Assets() {
 
   const fetchAssets = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('assets')
         .select('*')
@@ -99,7 +102,10 @@ function Assets() {
     e.preventDefault()
     
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in')
+        return
+      }
       const { accumulated_depreciation, current_value } = calculateDepreciation(formData)
       
       const assetData = {

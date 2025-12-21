@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { useNavigate } from 'react-router-dom'
 import { 
   TrendingUp, 
@@ -18,6 +19,7 @@ import { format, startOfMonth, endOfMonth, startOfYear, eachMonthOfInterval } fr
 import { useFinancialYearStore } from '../store/financialYearStore'
 
 function Dashboard() {
+  const { user } = useUser()
   const navigate = useNavigate()
   const { financialYear, getFinancialYearDates } = useFinancialYearStore()
   const [loading, setLoading] = useState(true)
@@ -38,7 +40,6 @@ function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       // Get FY dates from selected financial year

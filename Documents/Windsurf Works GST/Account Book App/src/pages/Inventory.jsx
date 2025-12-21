@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Edit2, Trash2, X, PackagePlus, PackageMinus, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 
 function Inventory() {
+  const { user } = useUser()
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -37,7 +39,8 @@ function Inventory() {
 
   const fetchInventory = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       const { data, error } = await supabase
         .from('inventory')
         .select('*')
@@ -56,7 +59,10 @@ function Inventory() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in')
+        return
+      }
       
       if (editingId) {
         const { error } = await supabase
@@ -93,7 +99,11 @@ function Inventory() {
   const handleStockAdjust = async (e) => {
     e.preventDefault()
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('You must be logged in')
+        return
+      }
+      
       const { error } = await supabase.from('stock_movements').insert([{
         user_id: user.id,
         inventory_id: selectedProduct.id,
