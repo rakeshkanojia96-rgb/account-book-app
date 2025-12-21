@@ -43,6 +43,11 @@ class QueryBuilder {
     return this
   }
 
+  ilike(column, value) {
+    this.whereConditions.push({ column, operator: 'ILIKE', value })
+    return this
+  }
+
   order(column, options = {}) {
     const direction = options.ascending ? 'ASC' : 'DESC'
     this.orderByClause = `${column} ${direction}`
@@ -85,8 +90,10 @@ class QueryBuilder {
           query += ` LIMIT ${this.limitValue}`
         }
       } else if (this.queryType === 'insert') {
-        const columns = Object.keys(this.insertData)
-        const values = Object.values(this.insertData)
+        // Support both insert({ ... }) and insert([{ ... }])
+        const row = Array.isArray(this.insertData) ? this.insertData[0] : this.insertData
+        const columns = Object.keys(row)
+        const values = Object.values(row)
         params = values
         
         const columnNames = columns.join(', ')
