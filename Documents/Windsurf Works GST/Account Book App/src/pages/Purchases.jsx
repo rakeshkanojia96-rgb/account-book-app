@@ -291,11 +291,23 @@ function Purchases() {
     return matchesSearch && matchesCategory
   })
 
-  // Calculate summary metrics
-  const totalPurchases = filteredPurchases.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0)
-  const totalBaseAmount = filteredPurchases.reduce((sum, purchase) => sum + (purchase.amount || 0), 0)
-  const totalGST = filteredPurchases.reduce((sum, purchase) => sum + (purchase.gst_amount || 0), 0)
-  const totalQuantity = filteredPurchases.reduce((sum, purchase) => sum + (purchase.quantity || 0), 0)
+  // Calculate summary metrics (Neon returns NUMERIC columns as strings, so cast to Number)
+  const totalPurchases = filteredPurchases.reduce(
+    (sum, purchase) => sum + (Number(purchase.total_amount) || 0),
+    0
+  )
+  const totalBaseAmount = filteredPurchases.reduce(
+    (sum, purchase) => sum + (Number(purchase.amount) || 0),
+    0
+  )
+  const totalGST = filteredPurchases.reduce(
+    (sum, purchase) => sum + (Number(purchase.gst_amount) || 0),
+    0
+  )
+  const totalQuantity = filteredPurchases.reduce(
+    (sum, purchase) => sum + (Number(purchase.quantity) || 0),
+    0
+  )
   const uniqueSuppliers = [...new Set(filteredPurchases.map(p => p.supplier_name))].length
   const avgPurchaseValue = filteredPurchases.length > 0 ? totalPurchases / filteredPurchases.length : 0
 
