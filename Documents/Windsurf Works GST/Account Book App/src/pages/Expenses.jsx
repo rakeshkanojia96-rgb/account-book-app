@@ -138,7 +138,7 @@ function Expenses() {
     return matchesSearch && matchesCategory
   })
 
-  const totalAmount = filteredExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0)
+  const totalAmount = filteredExpenses.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0)
 
   return (
     <div className="space-y-6">

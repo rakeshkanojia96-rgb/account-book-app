@@ -380,15 +380,15 @@ function Sales() {
     return matchesSearch && matchesPlatform
   })
 
-  // Calculate summary metrics
-  const totalSales = filteredSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0)
-  const totalBaseAmount = filteredSales.reduce((sum, sale) => sum + (sale.amount || 0), 0)
-  const totalGST = filteredSales.reduce((sum, sale) => sum + (sale.gst_amount || 0), 0)
-  const totalCost = filteredSales.reduce((sum, sale) => sum + (sale.cost_price || 0), 0)
-  const totalReceived = filteredSales.reduce((sum, sale) => sum + (sale.amount_received || 0), 0)
-  const totalCommission = filteredSales.reduce((sum, sale) => sum + (sale.platform_commission || 0), 0)
-  const totalExpenses = filteredSales.reduce((sum, sale) => sum + (sale.selling_expense_amount || 0), 0)
-  const totalProfit = filteredSales.reduce((sum, sale) => sum + (sale.profit_amount || 0), 0)
+  // Calculate summary metrics (cast NUMERIC strings from Neon to numbers)
+  const totalSales = filteredSales.reduce((sum, sale) => sum + (Number(sale.total_amount) || 0), 0)
+  const totalBaseAmount = filteredSales.reduce((sum, sale) => sum + (Number(sale.amount) || 0), 0)
+  const totalGST = filteredSales.reduce((sum, sale) => sum + (Number(sale.gst_amount) || 0), 0)
+  const totalCost = filteredSales.reduce((sum, sale) => sum + (Number(sale.cost_price) || 0), 0)
+  const totalReceived = filteredSales.reduce((sum, sale) => sum + (Number(sale.amount_received) || 0), 0)
+  const totalCommission = filteredSales.reduce((sum, sale) => sum + (Number(sale.platform_commission) || 0), 0)
+  const totalExpenses = filteredSales.reduce((sum, sale) => sum + (Number(sale.selling_expense_amount) || 0), 0)
+  const totalProfit = filteredSales.reduce((sum, sale) => sum + (Number(sale.profit_amount) || 0), 0)
 
   return (
     <div className="space-y-6">

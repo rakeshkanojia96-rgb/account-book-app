@@ -80,17 +80,18 @@ function Dashboard() {
         .eq('user_id', user.id)
 
       // Calculate metrics
-      const totalSales = sales?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
-      const totalPurchases = purchases?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
-      const totalExpenses = expenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0
-      const assetsValue = assets?.reduce((sum, a) => sum + (a.current_value || 0), 0) || 0
+      // Neon returns NUMERIC columns as strings, so always cast to Number before summing
+      const totalSales = sales?.reduce((sum, s) => sum + (Number(s.amount) || 0), 0) || 0
+      const totalPurchases = purchases?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0
+      const totalExpenses = expenses?.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) || 0
+      const assetsValue = assets?.reduce((sum, a) => sum + (Number(a.current_value) || 0), 0) || 0
       const netProfit = totalSales - totalPurchases - totalExpenses
 
       // Platform-wise sales
       const platformData = {}
       sales?.forEach(s => {
         const platform = s.platform || 'Offline'
-        platformData[platform] = (platformData[platform] || 0) + s.amount
+        platformData[platform] = (platformData[platform] || 0) + (Number(s.amount) || 0)
       })
 
       const platformSales = Object.entries(platformData).map(([name, value]) => ({
@@ -99,17 +100,17 @@ function Dashboard() {
       }))
 
       // Monthly sales data
-      const months = eachMonthOfInterval({ start: fyStart, end: new Date() })
+      const months = eachMonthOfInterval({ start: fyStart, end: fyEnd })
       const monthlySales = months.map(month => {
         const monthSales = sales?.filter(s => {
           const saleDate = new Date(s.date)
           return saleDate >= startOfMonth(month) && saleDate <= endOfMonth(month)
-        }).reduce((sum, s) => sum + s.amount, 0) || 0
+        }).reduce((sum, s) => sum + (Number(s.amount) || 0), 0) || 0
 
         const monthPurchases = purchases?.filter(p => {
           const purchaseDate = new Date(p.date)
           return purchaseDate >= startOfMonth(month) && purchaseDate <= endOfMonth(month)
-        }).reduce((sum, p) => sum + p.amount, 0) || 0
+        }).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0
 
         return {
           month: format(month, 'MMM'),

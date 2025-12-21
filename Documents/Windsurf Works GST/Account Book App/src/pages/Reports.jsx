@@ -56,10 +56,10 @@ function Reports() {
       const expenses = expensesRes.data || []
       const assets = assetsRes.data || []
 
-      const totalSales = sales.reduce((sum, s) => sum + (s.total_amount || 0), 0)
-      const totalPurchases = purchases.reduce((sum, p) => sum + (p.total_amount || 0), 0)
-      const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-      const assetsValue = assets.reduce((sum, a) => sum + (a.current_value || 0), 0)
+      const totalSales = sales.reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
+      const totalPurchases = purchases.reduce((sum, p) => sum + (Number(p.total_amount) || 0), 0)
+      const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+      const assetsValue = assets.reduce((sum, a) => sum + (Number(a.current_value) || 0), 0)
       
       const grossProfit = totalSales - totalPurchases
       const netProfit = grossProfit - totalExpenses

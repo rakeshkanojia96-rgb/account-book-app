@@ -413,11 +413,11 @@ function SalesReturns() {
     return matchesSearch
   })
 
-  // Calculate reconciliation summary
-  const totalReturnAmount = filteredReturns.reduce((sum, ret) => sum + (ret.total_amount || 0), 0)
-  const totalShippingFees = filteredReturns.reduce((sum, ret) => sum + (ret.return_shipping_fee || 0), 0)
-  const totalClaimAmount = filteredReturns.reduce((sum, ret) => sum + (ret.claim_amount || 0), 0)
-  const netLoss = filteredReturns.reduce((sum, ret) => sum + (ret.net_loss || 0), 0)
+  // Calculate reconciliation summary (cast NUMERIC strings to numbers)
+  const totalReturnAmount = filteredReturns.reduce((sum, ret) => sum + (Number(ret.total_amount) || 0), 0)
+  const totalShippingFees = filteredReturns.reduce((sum, ret) => sum + (Number(ret.return_shipping_fee) || 0), 0)
+  const totalClaimAmount = filteredReturns.reduce((sum, ret) => sum + (Number(ret.claim_amount) || 0), 0)
+  const netLoss = filteredReturns.reduce((sum, ret) => sum + (Number(ret.net_loss) || 0), 0)
 
   return (
     <div className="space-y-6">
