@@ -137,6 +137,11 @@ function Dashboard() {
     }
   }
 
+  const formatINR = (val) => {
+    const num = Number(val) || 0
+    return num.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+  }
+
   const StatCard = ({ title, value, icon: Icon, trend, trendValue, color, onClick }) => (
     <div 
       onClick={onClick}
@@ -148,7 +153,7 @@ function Dashboard() {
           <div className="flex items-baseline space-x-2">
             <IndianRupee className="w-5 h-5 text-gray-400" />
             <h3 className="text-2xl font-bold text-gray-900">
-              {value.toLocaleString('en-IN')}
+              {formatINR(value)}
             </h3>
           </div>
           {trend && (
