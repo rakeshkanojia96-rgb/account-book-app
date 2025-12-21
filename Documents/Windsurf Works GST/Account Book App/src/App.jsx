@@ -12,10 +12,13 @@ import Assets from './pages/Assets'
 import Inventory from './pages/Inventory'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import PendingApproval from './pages/PendingApproval'
 
 // Layout
 import Layout from './components/Layout'
 import { useAuthStore } from './store/authStore'
+
+const ADMIN_EMAIL = 'rakeshkanojia96@gmail.com'
 
 function App() {
   const { user: clerkUser, isLoaded } = useUser()
@@ -30,6 +33,11 @@ function App() {
       })
     }
   }, [clerkUser, isLoaded, setUser])
+
+  // Check if user is approved
+  const isAdmin = clerkUser?.emailAddresses[0]?.emailAddress === ADMIN_EMAIL
+  const isApproved = clerkUser?.publicMetadata?.approved === true || isAdmin
+  const userEmail = clerkUser?.emailAddresses[0]?.emailAddress
 
   if (!isLoaded) {
     return (
@@ -48,19 +56,25 @@ function App() {
         <Route path="/*" element={
           <>
             <SignedIn>
-              <Routes>
-                <Route path="/" element={<Layout />}>
-                  <Route index element={<Dashboard />} />
-                  <Route path="purchases" element={<Purchases />} />
-                  <Route path="sales" element={<Sales />} />
-                  <Route path="sales-returns" element={<SalesReturns />} />
-                  <Route path="expenses" element={<Expenses />} />
-                  <Route path="assets" element={<Assets />} />
-                  <Route path="inventory" element={<Inventory />} />
-                  <Route path="reports" element={<Reports />} />
-                  <Route path="settings" element={<Settings />} />
-                </Route>
-              </Routes>
+              {!isApproved ? (
+                <Routes>
+                  <Route path="*" element={<PendingApproval />} />
+                </Routes>
+              ) : (
+                <Routes>
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={<Dashboard />} />
+                    <Route path="purchases" element={<Purchases />} />
+                    <Route path="sales" element={<Sales />} />
+                    <Route path="sales-returns" element={<SalesReturns />} />
+                    <Route path="expenses" element={<Expenses />} />
+                    <Route path="assets" element={<Assets />} />
+                    <Route path="inventory" element={<Inventory />} />
+                    <Route path="reports" element={<Reports />} />
+                    <Route path="settings" element={<Settings />} />
+                  </Route>
+                </Routes>
+              )}
             </SignedIn>
             <SignedOut>
               <RedirectToSignIn />

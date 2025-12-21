@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
-import { Building2, User, CreditCard, Save, Check } from 'lucide-react'
+import { Building2, User, CreditCard, Save, Check, Shield, ExternalLink } from 'lucide-react'
+
+const ADMIN_EMAIL = 'rakeshkanojia96@gmail.com'
 
 function Settings() {
   const { user } = useUser()
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  
+  const isAdmin = user?.emailAddresses[0]?.emailAddress === ADMIN_EMAIL
   
   const [formData, setFormData] = useState({
     business_name: '',
@@ -197,6 +201,92 @@ function Settings() {
         </form>
       </div>
 
+      {/* Admin Panel - Only visible to admin */}
+      {isAdmin && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-600 rounded-lg">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Admin: User Management</h3>
+              <p className="text-sm text-gray-600">Approve or reject user signups</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg p-5 space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-semibold text-blue-900 mb-2">How User Approval Works:</h4>
+              <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                <li>New users sign up and see "Pending Approval" message</li>
+                <li>You (admin) review users in Clerk Dashboard</li>
+                <li>Approve users by setting their <code className="bg-blue-100 px-1 rounded">approved</code> metadata to <code className="bg-blue-100 px-1 rounded">true</code></li>
+                <li>Approved users can immediately access the app</li>
+              </ol>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-semibold text-gray-900 mb-3">To Approve/Reject Users:</h4>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-700 mb-2">Open Clerk Dashboard → Users tab</p>
+                    <a
+                      href="https://dashboard.clerk.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      Open Clerk Dashboard
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-700">Click on user → Scroll to "Metadata" section → Click "Public metadata"</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                    3
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-700 mb-2"><strong>To Approve:</strong> Add this JSON:</p>
+                    <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
+                      {`{ "approved": true }`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-red-100 text-red-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                    ✕
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-700"><strong>To Reject:</strong> Click the 3-dot menu → Ban/Delete user</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> Your account ({ADMIN_EMAIL}) is automatically approved and has admin privileges.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* App Information */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4">Application Information</h3>
@@ -211,7 +301,7 @@ function Settings() {
           </div>
           <div>
             <p className="text-gray-600">Account Type</p>
-            <p className="font-semibold text-gray-900">Standard</p>
+            <p className="font-semibold text-gray-900">{isAdmin ? 'Administrator' : 'Standard'}</p>
           </div>
           <div>
             <p className="text-gray-600">Data Backup</p>
