@@ -127,7 +127,8 @@ function Purchases() {
           }])
         }
       } else {
-        // Create new inventory item if doesn't exist
+        // Create new inventory item if it doesn't exist
+        // Map fields to Neon inventory schema
         const { error: createInvError } = await supabase
           .from('inventory')
           .insert([{
@@ -135,9 +136,8 @@ function Purchases() {
             product_name: formData.item_name,
             category: formData.category,
             current_stock: formData.quantity,
-            opening_stock: formData.quantity,
-            minimum_stock: 5,
-            unit: 'Pieces'
+            reorder_level: 5,
+            unit_of_measure: 'Pieces'
           }])
         
         if (createInvError) throw createInvError

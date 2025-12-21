@@ -64,10 +64,19 @@ function Inventory() {
         return
       }
       
+      const notes = formData.notes || null
+
       if (editingId) {
         const { error } = await supabase
           .from('inventory')
-          .update({ ...formData, user_id: user.id })
+          .update({
+            product_name: formData.product_name,
+            sku: formData.product_code || null,
+            category: formData.category || null,
+            unit_of_measure: formData.unit || 'Pieces',
+            reorder_level: formData.minimum_stock || 0,
+            notes
+          })
           .eq('id', editingId)
         if (error) throw error
       } else {
@@ -85,8 +94,16 @@ function Inventory() {
           return
         }
         
-        const productData = { ...formData, user_id: user.id, current_stock: formData.opening_stock }
-        const { error } = await supabase.from('inventory').insert([productData])
+        const { error } = await supabase.from('inventory').insert([{
+          user_id: user.id,
+          product_name: formData.product_name,
+          sku: formData.product_code || null,
+          category: formData.category || null,
+          unit_of_measure: formData.unit || 'Pieces',
+          current_stock: formData.opening_stock || 0,
+          reorder_level: formData.minimum_stock || 0,
+          notes
+        }])
         if (error) throw error
       }
       resetForm()
