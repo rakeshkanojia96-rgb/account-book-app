@@ -1,8 +1,9 @@
-import { useUser } from '@clerk/clerk-react'
+import { useUser, useClerk } from '@clerk/clerk-react'
 import { Clock, Mail, AlertCircle } from 'lucide-react'
 
 function PendingApproval() {
   const { user } = useUser()
+  const { signOut } = useClerk()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
@@ -60,9 +61,15 @@ function PendingApproval() {
           </button>
 
           <button
-            onClick={() => {
-              if (confirm('Are you sure you want to sign out?')) {
-                window.location.href = '/sign-out'
+            onClick={async () => {
+              const confirmed = confirm('Are you sure you want to sign out?')
+              if (!confirmed) return
+
+              try {
+                await signOut()
+              } catch (err) {
+                console.error('Error signing out:', err)
+                alert('Could not sign out. Please try again.')
               }
             }}
             className="w-full mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
