@@ -127,8 +127,7 @@ function Inventory() {
         movement_type: adjustData.movement_type,
         quantity: Math.abs(adjustData.quantity),
         reference_type: 'ADJUSTMENT',
-        notes: adjustData.notes,
-        movement_date: adjustData.movement_date
+        notes: adjustData.notes
       }])
       if (error) throw error
       setShowStockAdjust(false)

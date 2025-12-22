@@ -124,8 +124,7 @@ function Purchases() {
             movement_type: 'IN',
             quantity: formData.quantity,
             reference_type: 'PURCHASE',
-            notes: `Purchase from ${formData.supplier_name || 'Supplier'}`,
-            movement_date: formData.date
+            notes: `Purchase from ${formData.supplier_name || 'Supplier'}`
           }])
         }
       } else {
@@ -246,8 +245,7 @@ function Purchases() {
             movement_type: 'OUT',
             quantity: purchase.quantity,
             reference_type: 'PURCHASE_DELETED',
-            notes: `Purchase deleted - stock reduced`,
-            movement_date: new Date().toISOString().split('T')[0]
+            notes: `Purchase deleted - stock reduced`
           }])
         }
       }
