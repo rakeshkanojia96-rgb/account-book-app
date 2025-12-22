@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Edit2, Trash2, X, Copy } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, parse, isValid } from 'date-fns'
+import * as XLSX from 'xlsx'
 
 function Purchases() {
   const { user } = useUser()
@@ -285,6 +286,248 @@ function Purchases() {
     setShowForm(false)
   }
 
+  const parseCsvDate = (value) => {
+    if (!value) return null
+    const str = String(value).trim()
+    // Expect dd-mm-yyyy from user CSV
+    const parsed = parse(str, 'dd-MM-yyyy', new Date())
+    if (!isValid(parsed)) return null
+    return format(parsed, 'yyyy-MM-dd')
+  }
+
+  const formatINR = (val) => {
+    const num = Number(val) || 0
+    return num.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'date',
+      'invoice_number',
+      'supplier_name',
+      'category',
+      'item_name',
+      'quantity',
+      'unit_price',
+      'gst_percentage',
+      'payment_method',
+      'notes'
+    ]
+
+    const sampleRow = [
+      '28-01-2023',
+      'INV-001',
+      'D2 Hosiery',
+      'Inventory',
+      'Sample Item',
+      '10',
+      '100',
+      '18',
+      'Online',
+      'Sample notes (date format dd-mm-yyyy)'
+    ]
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '')
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"'
+      }
+      return str
+    }
+
+    const csvContent =
+      headers.join(',') + '\n' +
+      sampleRow.map(escapeCsv).join(',') + '\n'
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'purchases_template.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleUploadCSV = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!user) {
+      alert('You must be logged in to upload CSVs')
+      event.target.value = ''
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const rows = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const data = e.target?.result
+            const workbook = XLSX.read(data, { type: 'binary' })
+            const sheetName = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[sheetName]
+            const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+            resolve(json)
+          } catch (err) {
+            reject(err)
+          }
+        }
+        reader.onerror = (err) => reject(err)
+        reader.readAsBinaryString(file)
+      })
+
+      const requiredColumns = [
+        'date',
+        'supplier_name',
+        'category',
+        'item_name',
+        'quantity',
+        'unit_price',
+        'gst_percentage'
+      ]
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        alert('CSV file is empty or could not be read.')
+        return
+      }
+
+      const missingCols = requiredColumns.filter((col) => !(col in rows[0]))
+      if (missingCols.length > 0) {
+        alert('CSV is missing required columns: ' + missingCols.join(', '))
+        return
+      }
+
+      let successCount = 0
+      let errorCount = 0
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        try {
+          const dbDate = parseCsvDate(row.date)
+          if (!dbDate) {
+            throw new Error('Invalid date format. Use dd-mm-yyyy')
+          }
+
+          const quantity = Number(row.quantity)
+          const unitPrice = Number(row.unit_price)
+          const gstPercentage = row.gst_percentage === '' || row.gst_percentage === null
+            ? 0
+            : Number(row.gst_percentage)
+
+          if (!row.item_name) {
+            throw new Error('item_name is required')
+          }
+          if (Number.isNaN(quantity) || Number.isNaN(unitPrice) || Number.isNaN(gstPercentage)) {
+            throw new Error('quantity, unit_price, and gst_percentage must be numbers')
+          }
+
+          const amount = quantity * unitPrice
+          const gstAmount = amount * (gstPercentage / 100)
+          const totalAmount = amount + gstAmount
+
+          const purchaseRecord = {
+            date: dbDate,
+            invoice_number: row.invoice_number || '',
+            supplier_name: row.supplier_name || '',
+            category: row.category || 'Raw Material',
+            item_name: row.item_name,
+            quantity,
+            unit_price: unitPrice,
+            gst_percentage: gstPercentage,
+            amount,
+            gst_amount: gstAmount,
+            total_amount: totalAmount,
+            payment_method: row.payment_method || 'Online',
+            notes: row.notes || ''
+          }
+
+          const { error: insertError } = await supabase
+            .from('purchases')
+            .insert([{ ...purchaseRecord, user_id: user.id }])
+
+          if (insertError) throw insertError
+
+          const { data: inventoryItems, error: invError } = await supabase
+            .from('inventory')
+            .select('*')
+            .ilike('product_name', purchaseRecord.item_name)
+            .eq('user_id', user.id)
+            .limit(1)
+
+          if (invError) throw invError
+
+          const purchaseQty = Number(purchaseRecord.quantity) || 0
+
+          if (inventoryItems && inventoryItems.length > 0) {
+            const item = inventoryItems[0]
+            const currentStock = Number(item.current_stock) || 0
+
+            const { error: updateInvError } = await supabase
+              .from('inventory')
+              .update({
+                current_stock: currentStock + purchaseQty
+              })
+              .eq('id', item.id)
+
+            if (updateInvError) throw updateInvError
+
+            const { error: movementError } = await supabase
+              .from('stock_movements')
+              .insert([
+                {
+                  user_id: user.id,
+                  inventory_id: item.id,
+                  movement_type: 'IN',
+                  quantity: purchaseQty,
+                  reference_type: 'PURCHASE',
+                  notes: `Purchase from ${purchaseRecord.supplier_name || 'Supplier'}`
+                }
+              ])
+
+            if (movementError) throw movementError
+          } else {
+            const { error: createInvError } = await supabase
+              .from('inventory')
+              .insert([
+                {
+                  user_id: user.id,
+                  product_name: purchaseRecord.item_name,
+                  category: purchaseRecord.category,
+                  current_stock: purchaseQty,
+                  reorder_level: 5,
+                  unit_of_measure: 'Pieces'
+                }
+              ])
+
+            if (createInvError) throw createInvError
+          }
+
+          successCount++
+        } catch (rowError) {
+          console.error('Error importing row', i + 2, rowError)
+          errorCount++
+        }
+      }
+
+      alert(`CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`)
+      fetchPurchases()
+    } catch (error) {
+      console.error('Error processing CSV:', error)
+      alert('Error processing CSV: ' + error.message)
+    } finally {
+      setLoading(false)
+      event.target.value = ''
+    }
+  }
+
   const filteredPurchases = purchases.filter((purchase) => {
     const matchesSearch =
       purchase.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -316,14 +559,6 @@ function Purchases() {
   const avgPurchaseValue =
     filteredPurchases.length > 0 ? totalPurchases / filteredPurchases.length : 0
 
-  const formatINR = (val) => {
-    const num = Number(val) || 0
-    return num.toLocaleString('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -331,13 +566,31 @@ function Purchases() {
           <h2 className="text-2xl font-bold text-gray-900">Purchases</h2>
           <p className="text-gray-600">Track inventory and material purchases</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Purchase
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+          >
+            Download CSV Template
+          </button>
+          <label className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm cursor-pointer">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUploadCSV}
+              className="hidden"
+            />
+            Upload CSV
+          </label>
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Purchase
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
