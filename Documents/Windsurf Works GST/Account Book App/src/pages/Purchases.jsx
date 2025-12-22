@@ -105,11 +105,13 @@ function Purchases() {
         // Update existing inventory (only for NEW purchases, not edits)
         if (!editingId) {
           const item = inventoryItems[0]
+          const currentStock = Number(item.current_stock) || 0
+          const purchaseQty = Number(formData.quantity) || 0
           
           const { error: updateInvError } = await supabase
             .from('inventory')
             .update({ 
-              current_stock: item.current_stock + formData.quantity
+              current_stock: currentStock + purchaseQty
             })
             .eq('id', item.id)
           
@@ -224,7 +226,9 @@ function Purchases() {
         
         if (inventoryItems && inventoryItems.length > 0) {
           const item = inventoryItems[0]
-          const newStock = Math.max(0, item.current_stock - purchase.quantity)
+          const currentStock = Number(item.current_stock) || 0
+          const purchaseQty = Number(purchase.quantity) || 0
+          const newStock = Math.max(0, currentStock - purchaseQty)
           
           const { error: updateInvError } = await supabase
             .from('inventory')

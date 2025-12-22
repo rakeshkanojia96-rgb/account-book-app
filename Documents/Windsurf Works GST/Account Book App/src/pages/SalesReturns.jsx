@@ -213,10 +213,12 @@ function SalesReturns() {
           if (inventoryItems && inventoryItems.length > 0) {
             // Update existing inventory
             const item = inventoryItems[0]
+            const currentStock = Number(item.current_stock) || 0
+            const qty = Number(formData.quantity) || 0
             const { error: updateInvError } = await supabase
               .from('inventory')
               .update({ 
-                current_stock: item.current_stock + formData.quantity
+                current_stock: currentStock + qty
               })
               .eq('id', item.id)
             
@@ -347,10 +349,12 @@ function SalesReturns() {
             if (inventoryItems && inventoryItems.length > 0) {
               const item = inventoryItems[0]
               // Subtract the quantity that was added back
+              const currentStock = Number(item.current_stock) || 0
+              const qty = Number(returnRecord.quantity) || 0
               const { error: updateInvError } = await supabase
                 .from('inventory')
                 .update({ 
-                  current_stock: Math.max(0, item.current_stock - returnRecord.quantity)
+                  current_stock: Math.max(0, currentStock - qty)
                 })
                 .eq('id', item.id)
               
