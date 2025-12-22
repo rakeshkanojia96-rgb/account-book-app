@@ -289,8 +289,14 @@ function Purchases() {
   const parseCsvDate = (value) => {
     if (!value) return null
     const str = String(value).trim()
-    // Expect dd-mm-yyyy from user CSV
-    const parsed = parse(str, 'dd-MM-yyyy', new Date())
+    // Primary format: dd-mm-yyyy (e.g. 11-03-2023)
+    let parsed = parse(str, 'dd-MM-yyyy', new Date())
+
+    // Fallback: dd-MMM-yyyy (e.g. 11-Mar-2023) for convenience
+    if (!isValid(parsed)) {
+      parsed = parse(str, 'dd-MMM-yyyy', new Date())
+    }
+
     if (!isValid(parsed)) return null
     return format(parsed, 'yyyy-MM-dd')
   }
@@ -407,6 +413,7 @@ function Purchases() {
 
       let successCount = 0
       let errorCount = 0
+      const rowErrors = []
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
@@ -418,9 +425,12 @@ function Purchases() {
 
           const quantity = Number(row.quantity)
           const unitPrice = Number(row.unit_price)
-          const gstPercentage = row.gst_percentage === '' || row.gst_percentage === null
-            ? 0
-            : Number(row.gst_percentage)
+
+          // Allow values like 0, "0", "0%" etc.
+          const rawGst = row.gst_percentage === undefined || row.gst_percentage === null
+            ? ''
+            : String(row.gst_percentage).trim().replace('%', '')
+          const gstPercentage = rawGst === '' ? 0 : Number(rawGst)
 
           if (!row.item_name) {
             throw new Error('item_name is required')
@@ -513,11 +523,28 @@ function Purchases() {
           successCount++
         } catch (rowError) {
           console.error('Error importing row', i + 2, rowError)
+          rowErrors.push({
+            rowNumber: i + 2, // +2 accounts for header row and 0-based index
+            message: rowError?.message || String(rowError)
+          })
           errorCount++
         }
       }
 
-      alert(`CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`)
+      let message = `CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`
+
+      if (rowErrors.length > 0) {
+        const preview = rowErrors
+          .slice(0, 5)
+          .map((e) => `Row ${e.rowNumber}: ${e.message}`)
+          .join('\n')
+        message += `\n\nDetails (first ${Math.min(5, rowErrors.length)} errors):\n${preview}`
+        if (rowErrors.length > 5) {
+          message += `\n...and ${rowErrors.length - 5} more.`
+        }
+      }
+
+      alert(message)
       fetchPurchases()
     } catch (error) {
       console.error('Error processing CSV:', error)
