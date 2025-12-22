@@ -121,15 +121,30 @@ function Inventory() {
         return
       }
       
-      const { error } = await supabase.from('stock_movements').insert([{
+      const qty = Math.abs(adjustData.quantity) || 0
+      const currentStock = Number(selectedProduct.current_stock) || 0
+      const newStock = adjustData.movement_type === 'IN'
+        ? currentStock + qty
+        : Math.max(0, currentStock - qty)
+
+      // 1) Update inventory stock
+      const { error: invError } = await supabase
+        .from('inventory')
+        .update({ current_stock: newStock })
+        .eq('id', selectedProduct.id)
+      if (invError) throw invError
+
+      // 2) Log stock movement (for history/audit)
+      const { error: movError } = await supabase.from('stock_movements').insert([{
         user_id: user.id,
         inventory_id: selectedProduct.id,
         movement_type: adjustData.movement_type,
-        quantity: Math.abs(adjustData.quantity),
+        quantity: qty,
         reference_type: 'ADJUSTMENT',
         notes: adjustData.notes
       }])
-      if (error) throw error
+      if (movError) throw movError
+
       setShowStockAdjust(false)
       fetchInventory()
     } catch (error) {

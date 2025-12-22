@@ -199,8 +199,7 @@ function Sales() {
             movement_type: 'OUT',
             quantity: formData.quantity,
             reference_type: 'SALE',
-            notes: `Sale to ${formData.customer_name || 'Customer'}`,
-            movement_date: formData.date
+            notes: `Sale to ${formData.customer_name || 'Customer'}`
           }])
         }
       }
@@ -321,8 +320,7 @@ function Sales() {
             movement_type: 'IN',
             quantity: sale.quantity,
             reference_type: 'SALE_DELETED',
-            notes: `Sale deleted - stock restored`,
-            movement_date: new Date().toISOString().split('T')[0]
+            notes: `Sale deleted - stock restored`
           }])
         }
       }
