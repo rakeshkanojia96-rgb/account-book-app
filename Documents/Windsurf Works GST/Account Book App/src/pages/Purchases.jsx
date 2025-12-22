@@ -285,11 +285,13 @@ function Purchases() {
     setShowForm(false)
   }
 
-  const filteredPurchases = purchases.filter(purchase => {
-    const matchesSearch = purchase.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         purchase.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         purchase.item_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = filterCategory === 'all' || purchase.category === filterCategory
+  const filteredPurchases = purchases.filter((purchase) => {
+    const matchesSearch =
+      purchase.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      purchase.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      purchase.item_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory =
+      filterCategory === 'all' || purchase.category === filterCategory
     return matchesSearch && matchesCategory
   })
 
@@ -310,8 +312,17 @@ function Purchases() {
     (sum, purchase) => sum + (Number(purchase.quantity) || 0),
     0
   )
-  const uniqueSuppliers = [...new Set(filteredPurchases.map(p => p.supplier_name))].length
-  const avgPurchaseValue = filteredPurchases.length > 0 ? totalPurchases / filteredPurchases.length : 0
+  const uniqueSuppliers = [...new Set(filteredPurchases.map((p) => p.supplier_name))].length
+  const avgPurchaseValue =
+    filteredPurchases.length > 0 ? totalPurchases / filteredPurchases.length : 0
+
+  const formatINR = (val) => {
+    const num = Number(val) || 0
+    return num.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -333,17 +344,17 @@ function Purchases() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
           <p className="text-xs text-blue-600 mb-1 font-medium">Total Purchases</p>
-          <p className="text-lg font-bold text-blue-700">₹{totalPurchases.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+          <p className="text-lg font-bold text-blue-700">₹{formatINR(totalPurchases)}</p>
         </div>
         
         <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
           <p className="text-xs text-purple-600 mb-1 font-medium">Base Amount</p>
-          <p className="text-lg font-bold text-purple-700">₹{totalBaseAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+          <p className="text-lg font-bold text-purple-700">₹{formatINR(totalBaseAmount)}</p>
         </div>
         
         <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
           <p className="text-xs text-indigo-600 mb-1 font-medium">Total GST</p>
-          <p className="text-lg font-bold text-indigo-700">₹{totalGST.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+          <p className="text-lg font-bold text-indigo-700">₹{formatINR(totalGST)}</p>
         </div>
         
         <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
@@ -358,7 +369,7 @@ function Purchases() {
         
         <div className="bg-green-50 rounded-lg p-3 border border-green-200">
           <p className="text-xs text-green-600 mb-1 font-medium">Avg Purchase</p>
-          <p className="text-lg font-bold text-green-700">₹{avgPurchaseValue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+          <p className="text-lg font-bold text-green-700">₹{formatINR(avgPurchaseValue)}</p>
         </div>
       </div>
 
@@ -442,9 +453,9 @@ function Purchases() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{purchase.item_name}</td>
                     <td className="px-6 py-4 text-sm text-right text-gray-900">{purchase.quantity}</td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{purchase.amount?.toLocaleString('en-IN')}</td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{purchase.gst_amount?.toLocaleString('en-IN')}</td>
-                    <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">₹{purchase.total_amount?.toLocaleString('en-IN')}</td>
+                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{formatINR(purchase.amount)}</td>
+                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{formatINR(purchase.gst_amount)}</td>
+                    <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">₹{formatINR(purchase.total_amount)}</td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <button
@@ -624,15 +635,15 @@ function Purchases() {
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Base Amount:</span>
-                  <span className="font-medium">₹{formData.amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  <span className="font-medium">₹{formatINR(formData.amount)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">GST ({formData.gst_percentage}%):</span>
-                  <span className="font-medium">₹{formData.gst_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  <span className="font-medium">₹{formatINR(formData.gst_amount)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2">
                   <span>Total Amount:</span>
-                  <span className="text-green-600">₹{formData.total_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  <span className="text-green-600">₹{formatINR(formData.total_amount)}</span>
                 </div>
               </div>
 
