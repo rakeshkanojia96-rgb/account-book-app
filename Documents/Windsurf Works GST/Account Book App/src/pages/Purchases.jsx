@@ -287,18 +287,47 @@ function Purchases() {
   }
 
   const parseCsvDate = (value) => {
-    if (!value) return null
-    const str = String(value).trim()
-    // Primary format: dd-mm-yyyy (e.g. 11-03-2023)
-    let parsed = parse(str, 'dd-MM-yyyy', new Date())
+    if (value === undefined || value === null || value === '') return null
 
-    // Fallback: dd-MMM-yyyy (e.g. 11-Mar-2023) for convenience
-    if (!isValid(parsed)) {
-      parsed = parse(str, 'dd-MMM-yyyy', new Date())
+    // If it's already a Date
+    if (value instanceof Date && isValid(value)) {
+      return format(value, 'yyyy-MM-dd')
     }
 
-    if (!isValid(parsed)) return null
-    return format(parsed, 'yyyy-MM-dd')
+    // If it's a plain Excel serial number (e.g. 44997 => 2023-03-11)
+    if (typeof value === 'number') {
+      if (value > 20000 && value < 60000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+        const ms = excelEpoch.getTime() + value * 24 * 60 * 60 * 1000
+        const d = new Date(ms)
+        if (isValid(d)) return format(d, 'yyyy-MM-dd')
+      }
+
+      const d2 = new Date(value)
+      if (isValid(d2)) return format(d2, 'yyyy-MM-dd')
+    }
+
+    // Normal string path
+    let str = String(value).trim()
+    // Normalize common separators
+    str = str.replace(/\./g, '-').replace(/\//g, '-')
+
+    const patterns = [
+      'dd-MM-yyyy', // 11-03-2023
+      'd-M-yyyy',   // 1-3-2023
+      'dd-MMM-yyyy', // 11-Mar-2023
+      'd-MMM-yyyy',
+      'yyyy-MM-dd'  // 2023-03-11
+    ]
+
+    for (const pattern of patterns) {
+      const parsed = parse(str, pattern, new Date())
+      if (isValid(parsed)) {
+        return format(parsed, 'yyyy-MM-dd')
+      }
+    }
+
+    return null
   }
 
   const formatINR = (val) => {
@@ -420,7 +449,10 @@ function Purchases() {
         try {
           const dbDate = parseCsvDate(row.date)
           if (!dbDate) {
-            throw new Error('Invalid date format. Use dd-mm-yyyy')
+            const raw = row.date
+            throw new Error(
+              `Invalid date format for "${raw}" (type ${typeof raw}). Use dd-mm-yyyy or dd-MMM-yyyy (e.g. 11-03-2023 or 11-Mar-2023)`
+            )
           }
 
           const quantity = Number(row.quantity)
