@@ -157,7 +157,10 @@ function Assets() {
     setFormData({
       asset_name: asset.name || '',
       category: asset.category || 'Computer',
-      purchase_date: asset.purchase_date,
+      // Ensure date is in yyyy-MM-dd format for the date input
+      purchase_date: asset.purchase_date
+        ? format(new Date(asset.purchase_date), 'yyyy-MM-dd')
+        : format(new Date(), 'yyyy-MM-dd'),
       purchase_price: asset.purchase_price || 0,
       gst_percentage: formData.gst_percentage || 18,
       gst_amount: formData.gst_amount || 0,
@@ -501,8 +504,14 @@ function Assets() {
     (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const totalPurchaseValue = filteredAssets.reduce((sum, asset) => sum + (asset.purchase_price || 0), 0)
-  const totalCurrentValue = filteredAssets.reduce((sum, asset) => sum + (asset.current_value || 0), 0)
+  const totalPurchaseValue = filteredAssets.reduce(
+    (sum, asset) => sum + (Number(asset.purchase_price) || 0),
+    0
+  )
+  const totalCurrentValue = filteredAssets.reduce(
+    (sum, asset) => sum + (Number(asset.current_value) || 0),
+    0
+  )
 
   return (
     <div className="space-y-6">
@@ -546,11 +555,11 @@ function Assets() {
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-600 mb-2">Purchase Value</p>
-          <p className="text-3xl font-bold text-gray-900">₹{totalPurchaseValue.toLocaleString('en-IN')}</p>
+          <p className="text-3xl font-bold text-gray-900">₹{totalPurchaseValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-600 mb-2">Current Value</p>
-          <p className="text-3xl font-bold text-purple-600">₹{totalCurrentValue.toLocaleString('en-IN')}</p>
+          <p className="text-3xl font-bold text-purple-600">₹{totalCurrentValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </div>
       </div>
 
@@ -607,10 +616,10 @@ function Assets() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{format(new Date(asset.purchase_date), 'dd MMM yyyy')}</td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{asset.purchase_price?.toLocaleString('en-IN')}</td>
+                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{(Number(asset.purchase_price) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{asset.depreciation_method}</td>
-                    <td className="px-6 py-4 text-sm text-right text-red-600">₹{asset.accumulated_depreciation?.toLocaleString('en-IN')}</td>
-                    <td className="px-6 py-4 text-sm text-right font-semibold text-purple-600">₹{asset.current_value?.toLocaleString('en-IN')}</td>
+                    <td className="px-6 py-4 text-sm text-right text-red-600">₹{(Number(asset.accumulated_depreciation) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="px-6 py-4 text-sm text-right font-semibold text-purple-600">₹{(Number(asset.current_value) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <button
