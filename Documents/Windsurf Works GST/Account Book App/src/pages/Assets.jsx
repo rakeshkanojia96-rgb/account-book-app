@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Edit2, Trash2, X, Laptop, Copy } from 'lucide-react'
-import { format, differenceInMonths } from 'date-fns'
+import { format, differenceInMonths, parse, isValid } from 'date-fns'
+import * as XLSX from 'xlsx'
 
 function Assets() {
   const { user } = useUser()
@@ -225,6 +226,274 @@ function Assets() {
     setShowForm(false)
   }
 
+  const parseCsvDate = (value) => {
+    if (value === undefined || value === null || value === '') return null
+
+    // Already a Date
+    if (value instanceof Date && isValid(value)) {
+      return format(value, 'yyyy-MM-dd')
+    }
+
+    // Excel serial number
+    if (typeof value === 'number') {
+      if (value > 20000 && value < 60000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+        const ms = excelEpoch.getTime() + value * 24 * 60 * 60 * 1000
+        const d = new Date(ms)
+        if (isValid(d)) return format(d, 'yyyy-MM-dd')
+      }
+
+      const d2 = new Date(value)
+      if (isValid(d2)) return format(d2, 'yyyy-MM-dd')
+    }
+
+    // String formats
+    let str = String(value).trim()
+    str = str.replace(/\./g, '-').replace(/\//g, '-')
+
+    const patterns = [
+      'dd-MM-yyyy',
+      'd-M-yyyy',
+      'dd-MMM-yyyy',
+      'd-MMM-yyyy',
+      'yyyy-MM-dd'
+    ]
+
+    for (const pattern of patterns) {
+      const parsed = parse(str, pattern, new Date())
+      if (isValid(parsed)) {
+        return format(parsed, 'yyyy-MM-dd')
+      }
+    }
+
+    return null
+  }
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'asset_name',
+      'category',
+      'purchase_date',
+      'purchase_price',
+      'gst_percentage',
+      'depreciation_method',
+      'depreciation_rate',
+      'useful_life_years',
+      'notes'
+    ]
+
+    const sampleRow = [
+      'HP Laptop',
+      'Computer',
+      '28-01-2023',
+      '50000',
+      '18',
+      'Straight Line',
+      '',
+      '5',
+      'Office laptop purchase (date format dd-mm-yyyy)'
+    ]
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '')
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"'
+      }
+      return str
+    }
+
+    const csvContent =
+      headers.join(',') + '\n' +
+      sampleRow.map(escapeCsv).join(',') + '\n'
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'assets_template.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleUploadCSV = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!user) {
+      alert('You must be logged in to upload CSVs')
+      event.target.value = ''
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const rows = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const data = e.target?.result
+            const workbook = XLSX.read(data, { type: 'binary' })
+            const sheetName = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[sheetName]
+            const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+            resolve(json)
+          } catch (err) {
+            reject(err)
+          }
+        }
+        reader.onerror = (err) => reject(err)
+        reader.readAsBinaryString(file)
+      })
+
+      const requiredColumns = [
+        'asset_name',
+        'purchase_date',
+        'purchase_price'
+      ]
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        alert('CSV file is empty or could not be read.')
+        return
+      }
+
+      const missingCols = requiredColumns.filter((col) => !(col in rows[0]))
+      if (missingCols.length > 0) {
+        alert('CSV is missing required columns: ' + missingCols.join(', '))
+        return
+      }
+
+      let successCount = 0
+      let errorCount = 0
+      const rowErrors = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        try {
+          const name = String(row.asset_name || '').trim()
+          if (!name) {
+            throw new Error('asset_name is required')
+          }
+
+          const dbDate = parseCsvDate(row.purchase_date)
+          if (!dbDate) {
+            const raw = row.purchase_date
+            throw new Error(
+              `Invalid purchase_date format for "${raw}" (type ${typeof raw}). Use dd-mm-yyyy or dd-MMM-yyyy (e.g. 11-03-2023 or 11-Mar-2023)`
+            )
+          }
+
+          const purchasePrice = Number(row.purchase_price)
+          if (Number.isNaN(purchasePrice) || purchasePrice < 0) {
+            throw new Error('purchase_price must be a non-negative number')
+          }
+
+          const rawGst = row.gst_percentage === undefined || row.gst_percentage === null
+            ? ''
+            : String(row.gst_percentage).trim().replace('%', '')
+
+          let gstPercentage = rawGst === '' ? 0 : Number(rawGst)
+          if (!Number.isNaN(gstPercentage) && gstPercentage > 0 && gstPercentage <= 1) {
+            gstPercentage = gstPercentage * 100
+          }
+
+          let depreciationMethod = String(row.depreciation_method || '').trim()
+          if (!depreciationMethod) {
+            depreciationMethod = 'Straight Line'
+          }
+
+          const isStraightLine = depreciationMethod === 'Straight Line'
+          const isWDV = depreciationMethod === 'Written Down Value'
+
+          let depreciationRate = null
+          let usefulLifeYears = null
+
+          if (isStraightLine) {
+            usefulLifeYears = row.useful_life_years === undefined || row.useful_life_years === null
+              ? 5
+              : Number(row.useful_life_years)
+            if (Number.isNaN(usefulLifeYears) || usefulLifeYears <= 0) {
+              usefulLifeYears = 5
+            }
+          } else if (isWDV) {
+            depreciationRate = row.depreciation_rate === undefined || row.depreciation_rate === null
+              ? 10
+              : Number(row.depreciation_rate)
+            if (Number.isNaN(depreciationRate) || depreciationRate <= 0 || depreciationRate > 100) {
+              depreciationRate = 10
+            }
+          } else {
+            // Unknown method -> treat as Straight Line with default 5 years
+            depreciationMethod = 'Straight Line'
+            usefulLifeYears = 5
+          }
+
+          const assetForCalc = {
+            purchase_date: dbDate,
+            purchase_price: purchasePrice,
+            depreciation_method: depreciationMethod,
+            depreciation_rate: depreciationRate || 10,
+            useful_life_years: usefulLifeYears || 5
+          }
+
+          const { current_value } = calculateDepreciation(assetForCalc)
+
+          const assetData = {
+            user_id: user.id,
+            name,
+            category: row.category || 'Computer',
+            purchase_date: dbDate,
+            purchase_price: purchasePrice,
+            depreciation_method: depreciationMethod,
+            depreciation_rate: isWDV ? depreciationRate : null,
+            useful_life_years: isStraightLine ? usefulLifeYears : null,
+            notes: row.notes || '',
+            current_value
+          }
+
+          const { error: insertError } = await supabase
+            .from('assets')
+            .insert([assetData])
+
+          if (insertError) throw insertError
+
+          successCount++
+        } catch (rowError) {
+          console.error('Error importing asset row', i + 2, rowError)
+          rowErrors.push({
+            rowNumber: i + 2,
+            message: rowError?.message || String(rowError)
+          })
+          errorCount++
+        }
+      }
+
+      let message = `Assets CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`
+
+      if (rowErrors.length > 0) {
+        const preview = rowErrors
+          .slice(0, 5)
+          .map((e) => `Row ${e.rowNumber}: ${e.message}`)
+          .join('\n')
+        message += `\n\nDetails (first ${Math.min(5, rowErrors.length)} errors):\n${preview}`
+        if (rowErrors.length > 5) {
+          message += `\n...and ${rowErrors.length - 5} more.`
+        }
+      }
+
+      alert(message)
+      fetchAssets()
+    } catch (error) {
+      console.error('Error processing assets CSV:', error)
+      alert('Error processing CSV: ' + error.message)
+    } finally {
+      setLoading(false)
+      event.target.value = ''
+    }
+  }
+
   const filteredAssets = assets.filter(asset => 
     (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -239,13 +508,31 @@ function Assets() {
           <h2 className="text-2xl font-bold text-gray-900">Assets</h2>
           <p className="text-gray-600">Manage assets and depreciation</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Asset
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+          >
+            Download CSV Template
+          </button>
+          <label className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm cursor-pointer">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUploadCSV}
+              className="hidden"
+            />
+            Upload CSV
+          </label>
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Asset
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
