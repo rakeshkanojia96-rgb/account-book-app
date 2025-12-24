@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Edit2, Trash2, X, Copy } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
 function Expenses() {
   const { user } = useUser()
@@ -12,6 +12,9 @@ function Expenses() {
   const [editingId, setEditingId] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
+  const [dateFilter, setDateFilter] = useState('all')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
   
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -132,10 +135,57 @@ function Expenses() {
     setShowForm(false)
   }
 
+  const isWithinDateFilter = (dateStr) => {
+    if (dateFilter === 'all') return true
+    if (!dateStr) return false
+
+    const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return false
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    let from = null
+    let to = today
+
+    switch (dateFilter) {
+      case 'last_30_days':
+        from = subDays(today, 30)
+        break
+      case 'last_60_days':
+        from = subDays(today, 60)
+        break
+      case 'last_90_days':
+        from = subDays(today, 90)
+        break
+      case 'this_month':
+        from = startOfMonth(today)
+        break
+      case 'last_month': {
+        const lastMonthDate = subMonths(today, 1)
+        from = startOfMonth(lastMonthDate)
+        to = endOfMonth(lastMonthDate)
+        break
+      }
+      case 'custom': {
+        if (!customStartDate && !customEndDate) return true
+        from = customStartDate ? new Date(customStartDate) : null
+        to = customEndDate ? new Date(customEndDate) : null
+        break
+      }
+      default:
+        return true
+    }
+
+    if (from && date < from) return false
+    if (to && date > to) return false
+    return true
+  }
+
   const filteredExpenses = expenses.filter(expense => {
     const matchesSearch = expense.description?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = filterCategory === 'all' || expense.category === filterCategory
-    return matchesSearch && matchesCategory
+    const matchesDate = isWithinDateFilter(expense.date)
+    return matchesSearch && matchesCategory && matchesDate
   })
 
   const totalAmount = filteredExpenses.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0)
@@ -157,7 +207,7 @@ function Expenses() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -184,6 +234,46 @@ function Expenses() {
               <option value="Salary">Salary</option>
               <option value="Other">Other</option>
             </select>
+          </div>
+          <div className="space-y-2">
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              >
+                <option value="all">All Time</option>
+                <option value="last_30_days">Last 30 days</option>
+                <option value="last_60_days">Last 60 days</option>
+                <option value="last_90_days">Last 90 days</option>
+                <option value="this_month">This Month</option>
+                <option value="last_month">Last Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            {dateFilter === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-xs"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-end">
             <span className="text-lg font-bold text-gray-900">

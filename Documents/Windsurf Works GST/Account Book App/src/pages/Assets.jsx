@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
-import { Plus, Search, Edit2, Trash2, X, Laptop, Copy } from 'lucide-react'
-import { format, differenceInMonths, parse, isValid } from 'date-fns'
+import { Plus, Search, Edit2, Trash2, X, Laptop, Copy, Calendar } from 'lucide-react'
+import { format, differenceInMonths, parse, isValid, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import * as XLSX from 'xlsx'
 
 function Assets() {
@@ -12,6 +12,9 @@ function Assets() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [dateFilter, setDateFilter] = useState('all')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
   
   const [formData, setFormData] = useState({
     asset_name: '',
@@ -518,9 +521,57 @@ function Assets() {
     }
   }
 
-  const filteredAssets = assets.filter(asset => 
-    (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const isWithinDateFilter = (dateStr) => {
+    if (dateFilter === 'all') return true
+    if (!dateStr) return false
+
+    const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return false
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    let from = null
+    let to = today
+
+    switch (dateFilter) {
+      case 'last_30_days':
+        from = subDays(today, 30)
+        break
+      case 'last_60_days':
+        from = subDays(today, 60)
+        break
+      case 'last_90_days':
+        from = subDays(today, 90)
+        break
+      case 'this_month':
+        from = startOfMonth(today)
+        break
+      case 'last_month': {
+        const lastMonthDate = subMonths(today, 1)
+        from = startOfMonth(lastMonthDate)
+        to = endOfMonth(lastMonthDate)
+        break
+      }
+      case 'custom': {
+        if (!customStartDate && !customEndDate) return true
+        from = customStartDate ? new Date(customStartDate) : null
+        to = customEndDate ? new Date(customEndDate) : null
+        break
+      }
+      default:
+        return true
+    }
+
+    if (from && date < from) return false
+    if (to && date > to) return false
+    return true
+  }
+
+  const filteredAssets = assets.filter(asset => {
+    const matchesSearch = (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesDate = isWithinDateFilter(asset.purchase_date)
+    return matchesSearch && matchesDate
+  })
 
   const getAssetTotalCost = (asset) => {
     const price = Number(asset.purchase_price) || 0
@@ -590,15 +641,57 @@ function Assets() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search assets..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search assets..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              >
+                <option value="all">All Time</option>
+                <option value="last_30_days">Last 30 days</option>
+                <option value="last_60_days">Last 60 days</option>
+                <option value="last_90_days">Last 90 days</option>
+                <option value="this_month">This Month</option>
+                <option value="last_month">Last Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            {dateFilter === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-xs"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
