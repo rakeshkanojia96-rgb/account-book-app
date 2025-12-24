@@ -34,9 +34,12 @@ function Assets() {
   }, [])
 
   useEffect(() => {
-    // Auto-calculate GST and total cost
-    const gstAmount = formData.purchase_price * (formData.gst_percentage / 100)
-    const totalCost = formData.purchase_price + gstAmount
+    // Auto-calculate GST and total cost (ensure numeric values)
+    const purchasePrice = Number(formData.purchase_price) || 0
+    const gstPercentage = Number(formData.gst_percentage) || 0
+
+    const gstAmount = purchasePrice * (gstPercentage / 100)
+    const totalCost = purchasePrice + gstAmount
     
     setFormData(prev => ({
       ...prev,
