@@ -107,11 +107,22 @@ function Assets() {
         return
       }
       const { accumulated_depreciation, current_value } = calculateDepreciation(formData)
-      
+
+      // Map frontend fields to Neon assets schema
       const assetData = {
-        ...formData,
         user_id: user.id,
-        accumulated_depreciation,
+        name: formData.asset_name,
+        category: formData.category,
+        purchase_date: formData.purchase_date,
+        purchase_price: formData.purchase_price,
+        depreciation_method: formData.depreciation_method,
+        depreciation_rate: formData.depreciation_method === 'Written Down Value'
+          ? formData.depreciation_rate
+          : null,
+        useful_life_years: formData.depreciation_method === 'Straight Line'
+          ? formData.useful_life_years
+          : null,
+        notes: formData.notes,
         current_value
       }
       
@@ -140,18 +151,18 @@ function Assets() {
 
   const handleEdit = (asset) => {
     setFormData({
-      asset_name: asset.asset_name || '',
+      asset_name: asset.name || '',
       category: asset.category || 'Computer',
       purchase_date: asset.purchase_date,
       purchase_price: asset.purchase_price || 0,
-      gst_percentage: asset.gst_percentage || 18,
-      gst_amount: asset.gst_amount || 0,
-      total_cost: asset.total_cost || 0,
+      gst_percentage: formData.gst_percentage || 18,
+      gst_amount: formData.gst_amount || 0,
+      total_cost: formData.total_cost || 0,
       depreciation_method: asset.depreciation_method || 'Straight Line',
       depreciation_rate: asset.depreciation_rate || 10,
       useful_life_years: asset.useful_life_years || 5,
       current_value: asset.current_value || 0,
-      accumulated_depreciation: asset.accumulated_depreciation || 0,
+      accumulated_depreciation: calculateDepreciation(asset).accumulated_depreciation,
       notes: asset.notes || ''
     })
     setEditingId(asset.id)
@@ -160,7 +171,7 @@ function Assets() {
 
   const handleDuplicate = (asset) => {
     setFormData({
-      asset_name: asset.asset_name || '',
+      asset_name: asset.name || '',
       category: asset.category || 'Computer',
       purchase_date: format(new Date(), 'yyyy-MM-dd'),
       purchase_price: asset.purchase_price || 0,
@@ -215,7 +226,7 @@ function Assets() {
   }
 
   const filteredAssets = assets.filter(asset => 
-    asset.asset_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const totalPurchaseValue = filteredAssets.reduce((sum, asset) => sum + (asset.purchase_price || 0), 0)
@@ -299,7 +310,7 @@ function Assets() {
               ) : (
                 filteredAssets.map((asset) => (
                   <tr key={asset.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{asset.asset_name}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{asset.name}</td>
                     <td className="px-6 py-4">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
                         {asset.category}

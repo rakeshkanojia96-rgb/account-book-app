@@ -139,12 +139,154 @@ function Sales() {
       }
       
       if (editingId) {
+        // When editing an existing sale, adjust inventory based on the
+        // difference between the old sale quantity/product and the new ones.
+
+        // 1) Load the existing sale from the database
+        const { data: existingSale, error: existingError } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('id', editingId)
+          .single()
+
+        if (existingError) throw existingError
+
+        const oldQty = Number(existingSale?.quantity) || 0
+        const newQty = Number(formData.quantity) || 0
+        const oldProductName = existingSale?.product_name || ''
+        const newProductName = formData.product_name || ''
+
+        // 2) Update the sale record itself
         const { error } = await supabase
           .from('sales')
           .update({ ...formData, user_id: user.id })
           .eq('id', editingId)
         
         if (error) throw error
+
+        // 3) If quantity or product changed, adjust inventory accordingly
+        const productChanged = oldProductName.trim().toLowerCase() !== newProductName.trim().toLowerCase()
+
+        if (productChanged) {
+          // Case A: Product name changed – treat it like deleting the old sale
+          // for the old product and inserting a new sale for the new product.
+
+          // A1: Add stock back to OLD product
+          if (oldProductName) {
+            const { data: oldInvItems, error: oldInvError } = await supabase
+              .from('inventory')
+              .select('*')
+              .ilike('product_name', oldProductName)
+              .eq('user_id', user.id)
+              .limit(1)
+
+            if (oldInvError) throw oldInvError
+
+            if (oldInvItems && oldInvItems.length > 0) {
+              const item = oldInvItems[0]
+              const currentStock = Number(item.current_stock) || 0
+              const restoreQty = oldQty
+              const newStock = currentStock + restoreQty
+
+              const { error: updateOldInvError } = await supabase
+                .from('inventory')
+                .update({ current_stock: newStock })
+                .eq('id', item.id)
+
+              if (updateOldInvError) throw updateOldInvError
+
+              await supabase.from('stock_movements').insert([
+                {
+                  user_id: user.id,
+                  inventory_id: item.id,
+                  movement_type: 'IN',
+                  quantity: restoreQty,
+                  reference_type: 'SALE_EDIT',
+                  notes: `Sale updated (product changed) – stock restored for ${oldProductName}`
+                }
+              ])
+            }
+          }
+
+          // A2: Reduce stock for NEW product
+          if (newProductName && newQty !== 0) {
+            const { data: newInvItems, error: newInvError } = await supabase
+              .from('inventory')
+              .select('*')
+              .ilike('product_name', newProductName)
+              .eq('user_id', user.id)
+              .limit(1)
+
+            if (newInvError) throw newInvError
+
+            if (newInvItems && newInvItems.length > 0) {
+              const item = newInvItems[0]
+              const currentStock = Number(item.current_stock) || 0
+              const saleQty = newQty
+              const newStock = Math.max(0, currentStock - saleQty)
+
+              const { error: updateNewInvError } = await supabase
+                .from('inventory')
+                .update({ current_stock: newStock })
+                .eq('id', item.id)
+
+              if (updateNewInvError) throw updateNewInvError
+
+              await supabase.from('stock_movements').insert([
+                {
+                  user_id: user.id,
+                  inventory_id: item.id,
+                  movement_type: 'OUT',
+                  quantity: saleQty,
+                  reference_type: 'SALE_EDIT',
+                  notes: `Sale updated (product changed) – stock reduced for ${newProductName}`
+                }
+              ])
+            }
+          }
+        } else {
+          // Case B: Same product, quantity changed – adjust by the difference
+          const qtyDelta = newQty - oldQty // positive => more sold (reduce stock), negative => less sold (increase stock)
+
+          if (qtyDelta !== 0 && newProductName) {
+            const { data: invItems, error: invError } = await supabase
+              .from('inventory')
+              .select('*')
+              .ilike('product_name', newProductName)
+              .eq('user_id', user.id)
+              .limit(1)
+
+            if (invError) throw invError
+
+            if (invItems && invItems.length > 0) {
+              const item = invItems[0]
+              const currentStock = Number(item.current_stock) || 0
+              const adjustQty = Math.abs(qtyDelta)
+              const stockDelta = qtyDelta > 0 ? -adjustQty : adjustQty
+              const newStock = Math.max(0, currentStock + stockDelta)
+
+              const { error: updateInvError } = await supabase
+                .from('inventory')
+                .update({ current_stock: newStock })
+                .eq('id', item.id)
+
+              if (updateInvError) throw updateInvError
+
+              const movementType = qtyDelta > 0 ? 'OUT' : 'IN'
+
+              await supabase.from('stock_movements').insert([
+                {
+                  user_id: user.id,
+                  inventory_id: item.id,
+                  movement_type: movementType,
+                  quantity: adjustQty,
+                  reference_type: 'SALE_EDIT',
+                  notes: `Sale updated – quantity changed from ${oldQty} to ${newQty}`
+                }
+              ])
+            }
+          }
+        }
       } else {
         // Check if order_id already exists (if provided)
         if (formData.order_id) {
@@ -181,7 +323,9 @@ function Sales() {
         
         if (inventoryItems && inventoryItems.length > 0) {
           const item = inventoryItems[0]
-          const newStock = Math.max(0, item.current_stock - formData.quantity)
+          const currentStock = Number(item.current_stock) || 0
+          const saleQty = Number(formData.quantity) || 0
+          const newStock = Math.max(0, currentStock - saleQty)
           
           const { error: updateInvError } = await supabase
             .from('inventory')
@@ -197,7 +341,7 @@ function Sales() {
             user_id: user.id,
             inventory_id: item.id,
             movement_type: 'OUT',
-            quantity: formData.quantity,
+            quantity: saleQty,
             reference_type: 'SALE',
             notes: `Sale to ${formData.customer_name || 'Customer'}`
           }])
@@ -303,11 +447,14 @@ function Sales() {
         
         if (inventoryItems && inventoryItems.length > 0) {
           const item = inventoryItems[0]
+          const currentStock = Number(item.current_stock) || 0
+          const saleQty = Number(sale.quantity) || 0
+          const newStock = currentStock + saleQty
           
           const { error: updateInvError } = await supabase
             .from('inventory')
             .update({ 
-              current_stock: item.current_stock + sale.quantity
+              current_stock: newStock
             })
             .eq('id', item.id)
           
@@ -318,7 +465,7 @@ function Sales() {
             user_id: user.id,
             inventory_id: item.id,
             movement_type: 'IN',
-            quantity: sale.quantity,
+            quantity: saleQty,
             reference_type: 'SALE_DELETED',
             notes: `Sale deleted - stock restored`
           }])
