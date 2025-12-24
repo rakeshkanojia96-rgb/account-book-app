@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Filter, Download, Edit2, Trash2, X, Calendar, Copy } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, parse, isValid } from 'date-fns'
+import * as XLSX from 'xlsx'
 
 function Sales() {
   const { user } = useUser()
@@ -516,6 +517,374 @@ function Sales() {
     setShowForm(false)
   }
 
+  const parseCsvDate = (value) => {
+    if (value === undefined || value === null || value === '') return null
+
+    if (value instanceof Date && isValid(value)) {
+      return format(value, 'yyyy-MM-dd')
+    }
+
+    if (typeof value === 'number') {
+      if (value > 20000 && value < 60000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+        const ms = excelEpoch.getTime() + value * 24 * 60 * 60 * 1000
+        const d = new Date(ms)
+        if (isValid(d)) return format(d, 'yyyy-MM-dd')
+      }
+
+      const d2 = new Date(value)
+      if (isValid(d2)) return format(d2, 'yyyy-MM-dd')
+    }
+
+    let str = String(value).trim()
+    str = str.replace(/\./g, '-').replace(/\//g, '-')
+
+    const patterns = [
+      'dd-MM-yyyy',
+      'd-M-yyyy',
+      'dd-MMM-yyyy',
+      'd-MMM-yyyy',
+      'yyyy-MM-dd'
+    ]
+
+    for (const pattern of patterns) {
+      const parsed = parse(str, pattern, new Date())
+      if (isValid(parsed)) {
+        return format(parsed, 'yyyy-MM-dd')
+      }
+    }
+
+    return null
+  }
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'date',
+      'invoice_number',
+      'order_id',
+      'customer_name',
+      'platform',
+      'product_name',
+      'quantity',
+      'unit_price',
+      'gst_percentage',
+      'gst_inclusive',
+      'cost_price',
+      'amount_received',
+      'selling_expense_amount',
+      'selling_expense_category',
+      'payment_method',
+      'notes'
+    ]
+
+    const sampleRow = [
+      '28-01-2023',
+      'INV-001',
+      'ORD-001',
+      'Sample Customer',
+      'Meesho',
+      'Sample Product',
+      '2',
+      '500',
+      '18',
+      'FALSE',
+      '300',
+      '1000',
+      '0',
+      '',
+      'Online',
+      'Sample notes (date format dd-mm-yyyy)'
+    ]
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '')
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"'
+      }
+      return str
+    }
+
+    const csvContent =
+      headers.join(',') + '\n' +
+      sampleRow.map(escapeCsv).join(',') + '\n'
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'sales_template.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleUploadCSV = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!user) {
+      alert('You must be logged in to upload CSVs')
+      event.target.value = ''
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const rows = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const data = e.target?.result
+            const workbook = XLSX.read(data, { type: 'binary' })
+            const sheetName = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[sheetName]
+            const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+            resolve(json)
+          } catch (err) {
+            reject(err)
+          }
+        }
+        reader.onerror = (err) => reject(err)
+        reader.readAsBinaryString(file)
+      })
+
+      const requiredColumns = [
+        'date',
+        'platform',
+        'product_name',
+        'quantity',
+        'unit_price',
+        'gst_percentage'
+      ]
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        alert('CSV file is empty or could not be read.')
+        return
+      }
+
+      const missingCols = requiredColumns.filter((col) => !(col in rows[0]))
+      if (missingCols.length > 0) {
+        alert('CSV is missing required columns: ' + missingCols.join(', '))
+        return
+      }
+
+      let successCount = 0
+      let errorCount = 0
+      const rowErrors = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        try {
+          const dbDate = parseCsvDate(row.date)
+          if (!dbDate) {
+            const raw = row.date
+            throw new Error(
+              `Invalid date format for "${raw}" (type ${typeof raw}). Use dd-mm-yyyy or dd-MMM-yyyy (e.g. 11-03-2023 or 11-Mar-2023)`
+            )
+          }
+
+          const quantity = Number(row.quantity)
+          const unitPrice = Number(row.unit_price)
+
+          const rawGst = row.gst_percentage === undefined || row.gst_percentage === null
+            ? ''
+            : String(row.gst_percentage).trim().replace('%', '')
+
+          let gstPercentage = rawGst === '' ? 0 : Number(rawGst)
+
+          if (!Number.isNaN(gstPercentage) && gstPercentage > 0 && gstPercentage <= 1) {
+            gstPercentage = gstPercentage * 100
+          }
+
+          const costPrice = row.cost_price === undefined || row.cost_price === null
+            ? 0
+            : Number(row.cost_price)
+
+          const amountReceivedInput = row.amount_received === undefined || row.amount_received === null
+            ? 0
+            : Number(row.amount_received)
+
+          const sellingExpenseAmount = row.selling_expense_amount === undefined || row.selling_expense_amount === null
+            ? 0
+            : Number(row.selling_expense_amount)
+
+          if (!row.product_name) {
+            throw new Error('product_name is required')
+          }
+          if (
+            Number.isNaN(quantity) ||
+            Number.isNaN(unitPrice) ||
+            Number.isNaN(gstPercentage) ||
+            Number.isNaN(costPrice) ||
+            Number.isNaN(amountReceivedInput) ||
+            Number.isNaN(sellingExpenseAmount)
+          ) {
+            throw new Error('quantity, unit_price, gst_percentage, cost_price, amount_received, and selling_expense_amount must be numbers')
+          }
+
+          const gstInclusiveValue = String(row.gst_inclusive ?? '').trim().toLowerCase()
+          const gstInclusive =
+            gstInclusiveValue === 'true' ||
+            gstInclusiveValue === 'yes' ||
+            gstInclusiveValue === 'y' ||
+            gstInclusiveValue === '1'
+
+          let baseAmount
+          let gstAmount
+          let totalAmount
+          let amountReceived
+          let platformCommission
+          let profitAmount
+
+          if (gstInclusive) {
+            totalAmount = quantity * unitPrice
+            baseAmount = totalAmount / (1 + gstPercentage / 100)
+            gstAmount = totalAmount - baseAmount
+          } else {
+            baseAmount = quantity * unitPrice
+            gstAmount = baseAmount * (gstPercentage / 100)
+            totalAmount = baseAmount + gstAmount
+          }
+
+          if (amountReceivedInput > 0 && gstInclusive) {
+            amountReceived = amountReceivedInput
+            const receivedBase = amountReceived / (1 + gstPercentage / 100)
+            const receivedGst = amountReceived - receivedBase
+            baseAmount = receivedBase
+            gstAmount = receivedGst
+            platformCommission = totalAmount - amountReceived
+            profitAmount = receivedBase - (costPrice * quantity) - sellingExpenseAmount
+          } else {
+            amountReceived = amountReceivedInput || totalAmount
+            platformCommission = totalAmount - amountReceived
+            profitAmount = amountReceived - (costPrice * quantity) - sellingExpenseAmount
+          }
+
+          const orderId = row.order_id || ''
+
+          if (orderId) {
+            const { data: existingSales, error: checkError } = await supabase
+              .from('sales')
+              .select('id')
+              .eq('order_id', orderId)
+              .eq('user_id', user.id)
+
+            if (checkError) throw checkError
+
+            if (existingSales && existingSales.length > 0) {
+              throw new Error(`Order ID "${orderId}" already exists. Each order can only have one sale entry.`)
+            }
+          }
+
+          const saleRecord = {
+            date: dbDate,
+            invoice_number: row.invoice_number || '',
+            order_id: orderId,
+            customer_name: row.customer_name || '',
+            platform: row.platform || 'Meesho',
+            product_name: row.product_name,
+            quantity,
+            unit_price: unitPrice,
+            gst_percentage: gstPercentage,
+            gst_inclusive: gstInclusive,
+            amount: parseFloat(baseAmount.toFixed(2)),
+            gst_amount: parseFloat(gstAmount.toFixed(2)),
+            total_amount: parseFloat(totalAmount.toFixed(2)),
+            cost_price: costPrice,
+            amount_received: parseFloat(amountReceived.toFixed(2)),
+            platform_commission: parseFloat(platformCommission.toFixed(2)),
+            selling_expense_amount: sellingExpenseAmount,
+            selling_expense_category: row.selling_expense_category || '',
+            selling_expense_notes: row.selling_expense_notes || '',
+            profit_amount: parseFloat(profitAmount.toFixed(2)),
+            payment_method: row.payment_method || 'Online',
+            notes: row.notes || ''
+          }
+
+          const { error: insertError } = await supabase
+            .from('sales')
+            .insert([{ ...saleRecord, user_id: user.id }])
+
+          if (insertError) throw insertError
+
+          const { data: inventoryItems, error: invError } = await supabase
+            .from('inventory')
+            .select('*')
+            .ilike('product_name', saleRecord.product_name)
+            .eq('user_id', user.id)
+            .limit(1)
+
+          if (invError) throw invError
+
+          const saleQty = Number(saleRecord.quantity) || 0
+
+          if (inventoryItems && inventoryItems.length > 0) {
+            const item = inventoryItems[0]
+            const currentStock = Number(item.current_stock) || 0
+            const newStock = Math.max(0, currentStock - saleQty)
+
+            const { error: updateInvError } = await supabase
+              .from('inventory')
+              .update({
+                current_stock: newStock
+              })
+              .eq('id', item.id)
+
+            if (updateInvError) throw updateInvError
+
+            const { error: movementError } = await supabase
+              .from('stock_movements')
+              .insert([
+                {
+                  user_id: user.id,
+                  inventory_id: item.id,
+                  movement_type: 'OUT',
+                  quantity: saleQty,
+                  reference_type: 'SALE',
+                  notes: `Sale to ${saleRecord.customer_name || 'Customer'}`
+                }
+              ])
+
+            if (movementError) throw movementError
+          }
+
+          successCount++
+        } catch (rowError) {
+          console.error('Error importing row', i + 2, rowError)
+          rowErrors.push({
+            rowNumber: i + 2,
+            message: rowError?.message || String(rowError)
+          })
+          errorCount++
+        }
+      }
+
+      let message = `CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`
+
+      if (rowErrors.length > 0) {
+        const preview = rowErrors
+          .slice(0, 5)
+          .map((e) => `Row ${e.rowNumber}: ${e.message}`)
+          .join('\n')
+        message += `\n\nDetails (first ${Math.min(5, rowErrors.length)} errors):\n${preview}`
+        if (rowErrors.length > 5) {
+          message += `\n...and ${rowErrors.length - 5} more.`
+        }
+      }
+
+      alert(message)
+      fetchSales()
+    } catch (error) {
+      console.error('Error processing CSV:', error)
+      alert('Error processing CSV: ' + error.message)
+    } finally {
+      setLoading(false)
+      event.target.value = ''
+    }
+  }
+
   const filteredSales = sales.filter(sale => {
     const matchesSearch = sale.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -543,13 +912,31 @@ function Sales() {
           <h2 className="text-2xl font-bold text-gray-900">Sales</h2>
           <p className="text-gray-600">Manage your online and offline sales</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Sale
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+          >
+            Download CSV Template
+          </button>
+          <label className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm cursor-pointer">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUploadCSV}
+              className="hidden"
+            />
+            Upload CSV
+          </label>
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Sale
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
