@@ -504,8 +504,14 @@ function Assets() {
     (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const getAssetTotalCost = (asset) => {
+    const price = Number(asset.purchase_price) || 0
+    const gstPercent = 18
+    return price + price * (gstPercent / 100)
+  }
+
   const totalPurchaseValue = filteredAssets.reduce(
-    (sum, asset) => sum + (Number(asset.purchase_price) || 0),
+    (sum, asset) => sum + getAssetTotalCost(asset),
     0
   )
   const totalCurrentValue = filteredAssets.reduce(
@@ -585,6 +591,7 @@ function Assets() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Date</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Cost</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Depreciation</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Current Value</th>
@@ -594,7 +601,7 @@ function Assets() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center">
+                  <td colSpan="9" className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
@@ -602,7 +609,7 @@ function Assets() {
                 </tr>
               ) : filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="9" className="px-6 py-12 text-center text-gray-500">
                     No assets found. Add your first asset!
                   </td>
                 </tr>
@@ -617,6 +624,7 @@ function Assets() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{format(new Date(asset.purchase_date), 'dd MMM yyyy')}</td>
                     <td className="px-6 py-4 text-sm text-right text-gray-900">₹{(Number(asset.purchase_price) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="px-6 py-4 text-sm text-right text-gray-900">₹{getAssetTotalCost(asset).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{asset.depreciation_method}</td>
                     <td className="px-6 py-4 text-sm text-right text-red-600">₹{(Number(asset.accumulated_depreciation) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-sm text-right font-semibold text-purple-600">₹{(Number(asset.current_value) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
