@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS assets (
     category TEXT,
     purchase_date DATE NOT NULL,
     purchase_price NUMERIC DEFAULT 0,
+    gst_percentage NUMERIC DEFAULT 18,
     current_value NUMERIC DEFAULT 0,
     depreciation_method TEXT DEFAULT 'straight_line',
     depreciation_rate NUMERIC DEFAULT 10,

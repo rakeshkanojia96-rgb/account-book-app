@@ -119,6 +119,7 @@ function Assets() {
         category: formData.category,
         purchase_date: formData.purchase_date,
         purchase_price: formData.purchase_price,
+        gst_percentage: formData.gst_percentage,
         depreciation_method: formData.depreciation_method,
         depreciation_rate: formData.depreciation_method === 'Written Down Value'
           ? formData.depreciation_rate
@@ -154,6 +155,14 @@ function Assets() {
   }
 
   const handleEdit = (asset) => {
+    const price = Number(asset.purchase_price) || 0
+    const gstPercentage = asset.gst_percentage !== undefined && asset.gst_percentage !== null
+      ? Number(asset.gst_percentage) || 0
+      : 18
+
+    const gstAmount = price * (gstPercentage / 100)
+    const totalCost = price + gstAmount
+
     setFormData({
       asset_name: asset.name || '',
       category: asset.category || 'Computer',
@@ -161,10 +170,10 @@ function Assets() {
       purchase_date: asset.purchase_date
         ? format(new Date(asset.purchase_date), 'yyyy-MM-dd')
         : format(new Date(), 'yyyy-MM-dd'),
-      purchase_price: asset.purchase_price || 0,
-      gst_percentage: formData.gst_percentage || 18,
-      gst_amount: formData.gst_amount || 0,
-      total_cost: formData.total_cost || 0,
+      purchase_price: price,
+      gst_percentage: gstPercentage,
+      gst_amount: gstAmount,
+      total_cost: totalCost,
       depreciation_method: asset.depreciation_method || 'Straight Line',
       depreciation_rate: asset.depreciation_rate || 10,
       useful_life_years: asset.useful_life_years || 5,
@@ -177,14 +186,22 @@ function Assets() {
   }
 
   const handleDuplicate = (asset) => {
+    const price = Number(asset.purchase_price) || 0
+    const gstPercentage = asset.gst_percentage !== undefined && asset.gst_percentage !== null
+      ? Number(asset.gst_percentage) || 0
+      : 18
+
+    const gstAmount = price * (gstPercentage / 100)
+    const totalCost = price + gstAmount
+
     setFormData({
       asset_name: asset.name || '',
       category: asset.category || 'Computer',
       purchase_date: format(new Date(), 'yyyy-MM-dd'),
-      purchase_price: asset.purchase_price || 0,
-      gst_percentage: asset.gst_percentage || 18,
-      gst_amount: asset.gst_amount || 0,
-      total_cost: asset.total_cost || 0,
+      purchase_price: price,
+      gst_percentage: gstPercentage,
+      gst_amount: gstAmount,
+      total_cost: totalCost,
       depreciation_method: asset.depreciation_method || 'Straight Line',
       depreciation_rate: asset.depreciation_rate || 10,
       useful_life_years: asset.useful_life_years || 5,
@@ -452,6 +469,7 @@ function Assets() {
             category: row.category || 'Computer',
             purchase_date: dbDate,
             purchase_price: purchasePrice,
+            gst_percentage: gstPercentage,
             depreciation_method: depreciationMethod,
             depreciation_rate: isWDV ? depreciationRate : null,
             useful_life_years: isStraightLine ? usefulLifeYears : null,
@@ -506,7 +524,9 @@ function Assets() {
 
   const getAssetTotalCost = (asset) => {
     const price = Number(asset.purchase_price) || 0
-    const gstPercent = 18
+    const gstPercent = asset.gst_percentage !== undefined && asset.gst_percentage !== null
+      ? Number(asset.gst_percentage) || 0
+      : 18
     return price + price * (gstPercent / 100)
   }
 
