@@ -1478,6 +1478,12 @@ function Sales() {
                     <span>₹{formData.selling_expense_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                   </div>
                 )}
+                {formData.gst_amount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">(-) Sale GST:</span>
+                    <span>₹{formData.gst_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
                 {formData.profit_amount !== 0 && (
                   <div className="flex justify-between text-lg font-bold border-t border-gray-300 pt-2">
                     <span>Net Profit:</span>
