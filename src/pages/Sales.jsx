@@ -964,7 +964,7 @@ function Sales() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
         <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
           <p className="text-xs text-blue-600 mb-1 font-medium">Total Sales</p>
           <p className="text-lg font-bold text-blue-700">₹{totalSales.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
@@ -981,8 +981,13 @@ function Sales() {
         </div>
         
         <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
-          <p className="text-xs text-teal-600 mb-1 font-medium">Amount Received</p>
+          <p className="text-xs text-teal-600 mb-1 font-medium">Amount Received (Inc. GST)</p>
           <p className="text-lg font-bold text-teal-700">₹{totalReceived.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+        </div>
+
+        <div className="bg-cyan-50 rounded-lg p-3 border border-cyan-200">
+          <p className="text-xs text-cyan-600 mb-1 font-medium">Amount Received (Exc. GST)</p>
+          <p className="text-lg font-bold text-cyan-700">₹{totalBaseAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
         </div>
         
         <div className="bg-red-50 rounded-lg p-3 border border-red-200">
