@@ -30,13 +30,13 @@ Get token at: https://github.com/settings/tokens
 **Variable 1:**
 ```
 DATABASE_URL
-postgresql://neondb_owner:npg_Ul2vFDXLGNq4@ep-bitter-frog-a1y4c3a2-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+postgresql://YOUR_USER:YOUR_PASSWORD@YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require
 ```
 
 **Variable 2:**
 ```
 VITE_CLERK_PUBLISHABLE_KEY
-pk_test_YWRhcHRpbmctY29kLTUwLmNsZXJrLmFjY291bnRzLmRldiQ
+pk_test_your_clerk_publishable_key
 ```
 
 6. Click **"Deploy"**
