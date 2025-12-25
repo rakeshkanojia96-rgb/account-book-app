@@ -971,7 +971,7 @@ function Sales() {
         </div>
         
         <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
-          <p className="text-xs text-indigo-600 mb-1 font-medium">Total GST</p>
+          <p className="text-xs text-indigo-600 mb-1 font-medium">Total Sales GST</p>
           <p className="text-lg font-bold text-indigo-700">₹{totalGST.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
         </div>
         
