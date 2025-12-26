@@ -1100,13 +1100,14 @@ function Sales() {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Received (Inc. GST)</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Cost (Incl. GST)</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Expenses</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Net Profit</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="12" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="13" className="px-6 py-12 text-center text-gray-500">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
@@ -1114,7 +1115,7 @@ function Sales() {
                 </tr>
               ) : filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="13" className="px-6 py-12 text-center text-gray-500">
                     No sales found. Add your first sale to get started!
                   </td>
                 </tr>
@@ -1146,6 +1147,13 @@ function Sales() {
                       ).toLocaleString('en-IN')}
                     </td>
                     <td className="px-6 py-4 text-sm text-right text-gray-900">₹{sale.selling_expense_amount?.toLocaleString('en-IN')}</td>
+                    <td
+                      className={`px-6 py-4 text-sm text-right font-semibold ${
+                        (Number(sale.profit_amount) || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                      }`}
+                    >
+                      ₹{Math.abs(Number(sale.profit_amount) || 0).toLocaleString('en-IN')}
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <button
