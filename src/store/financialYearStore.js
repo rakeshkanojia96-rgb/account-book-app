@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 const FINANCIAL_YEARS = [
+  { label: '2026-27', start: '2026-04-01', end: '2027-03-31', value: '2026-27' },
   { label: '2025-26', start: '2025-04-01', end: '2026-03-31', value: '2025-26' },
   { label: '2024-25', start: '2024-04-01', end: '2025-03-31', value: '2024-25' },
   { label: '2023-24', start: '2023-04-01', end: '2024-03-31', value: '2023-24' },

@@ -23,6 +23,7 @@ function Dashboard() {
   const navigate = useNavigate()
   const { financialYear, getFinancialYearDates } = useFinancialYearStore()
   const [loading, setLoading] = useState(true)
+  const [viewRange, setViewRange] = useState('financialYear')
   const [metrics, setMetrics] = useState({
     totalSales: 0,
     totalPurchases: 0,
@@ -36,48 +37,97 @@ function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData()
-  }, [financialYear])
+  }, [financialYear, viewRange])
 
   const fetchDashboardData = async () => {
     try {
       if (!user) return
 
-      // Get FY dates from selected financial year
-      const fyDates = getFinancialYearDates(financialYear)
-      if (!fyDates) return
-      
-      const fyStart = new Date(fyDates.start)
-      const fyEnd = new Date(fyDates.end)
+      let sales = []
+      let purchases = []
+      let expenses = []
+      let assets = []
 
-      // Fetch sales
-      const { data: sales } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('date', fyStart.toISOString())
-        .lte('date', fyEnd.toISOString())
+      let fyStart
+      let fyEnd
 
-      // Fetch purchases
-      const { data: purchases } = await supabase
-        .from('purchases')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('date', fyStart.toISOString())
-        .lte('date', fyEnd.toISOString())
+      if (viewRange === 'all') {
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('user_id', user.id)
 
-      // Fetch expenses
-      const { data: expenses } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('date', fyStart.toISOString())
-        .lte('date', fyEnd.toISOString())
+        const { data: purchasesData } = await supabase
+          .from('purchases')
+          .select('*')
+          .eq('user_id', user.id)
 
-      // Fetch assets
-      const { data: assets } = await supabase
-        .from('assets')
-        .select('*')
-        .eq('user_id', user.id)
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('user_id', user.id)
+
+        const { data: assetsData } = await supabase
+          .from('assets')
+          .select('*')
+          .eq('user_id', user.id)
+
+        sales = salesData || []
+        purchases = purchasesData || []
+        expenses = expensesData || []
+        assets = assetsData || []
+
+        const allDates = [
+          ...sales.map((s) => new Date(s.date)),
+          ...purchases.map((p) => new Date(p.date)),
+        ].filter((d) => !Number.isNaN(d.getTime()))
+
+        if (allDates.length > 0) {
+          fyStart = new Date(Math.min(...allDates.map((d) => d.getTime())))
+          fyEnd = new Date(Math.max(...allDates.map((d) => d.getTime())))
+        } else {
+          const today = new Date()
+          fyStart = today
+          fyEnd = today
+        }
+      } else {
+        const fyDates = getFinancialYearDates(financialYear)
+        if (!fyDates) return
+
+        fyStart = new Date(fyDates.start)
+        fyEnd = new Date(fyDates.end)
+
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', fyStart.toISOString())
+          .lte('date', fyEnd.toISOString())
+
+        const { data: purchasesData } = await supabase
+          .from('purchases')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', fyStart.toISOString())
+          .lte('date', fyEnd.toISOString())
+
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', fyStart.toISOString())
+          .lte('date', fyEnd.toISOString())
+
+        const { data: assetsData } = await supabase
+          .from('assets')
+          .select('*')
+          .eq('user_id', user.id)
+
+        sales = salesData || []
+        purchases = purchasesData || []
+        expenses = expensesData || []
+        assets = assetsData || []
+      }
 
       // Calculate metrics
       // Neon returns NUMERIC columns as strings, so always cast to Number before summing
@@ -236,9 +286,40 @@ function Dashboard() {
           icon={metrics.netProfit >= 0 ? TrendingUp : TrendingDown}
           color={metrics.netProfit >= 0 ? 'bg-purple-500' : 'bg-red-500'}
           trend={metrics.netProfit >= 0 ? 'up' : 'down'}
-          trendValue={`FY 2024-25`}
+          trendValue={viewRange === 'all' ? 'All Time' : `FY ${financialYear}`}
           onClick={() => navigate('/reports')}
         />
+      </div>
+
+      {/* View Range Toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-600">
+          Viewing: {viewRange === 'all' ? 'All Time (since first record)' : `Financial Year ${financialYear}`}
+        </p>
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewRange('financialYear')}
+            className={`px-3 py-1.5 text-sm ${
+              viewRange === 'financialYear'
+                ? 'bg-primary text-white'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            FY {financialYear}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewRange('all')}
+            className={`px-3 py-1.5 text-sm border-l border-gray-200 ${
+              viewRange === 'all'
+                ? 'bg-primary text-white'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            All Time
+          </button>
+        </div>
       </div>
 
       {/* Charts */}

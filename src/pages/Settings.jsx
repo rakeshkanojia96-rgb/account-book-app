@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { Building2, User, CreditCard, Save, Check, Shield, ExternalLink } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 const ADMIN_EMAIL = 'rakeshkanojia96@gmail.com'
 
@@ -8,6 +9,7 @@ function Settings() {
   const { user } = useUser()
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [backupLoading, setBackupLoading] = useState(false)
   
   const isAdmin = user?.emailAddresses[0]?.emailAddress === ADMIN_EMAIL
   
@@ -59,6 +61,68 @@ function Settings() {
       alert('Error updating settings: ' + error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDownloadBackup = async () => {
+    if (!user) {
+      alert('You must be logged in to download a backup')
+      return
+    }
+
+    try {
+      setBackupLoading(true)
+
+      const userId = user.id
+      const tables = [
+        'sales',
+        'purchases',
+        'expenses',
+        'assets',
+        'inventory',
+        'sales_returns',
+        'stock_movements',
+        'expense_categories'
+      ]
+
+      const results = await Promise.all(
+        tables.map((table) =>
+          supabase
+            .from(table)
+            .select('*')
+            .eq('user_id', userId)
+        )
+      )
+
+      const backup = {
+        generated_at: new Date().toISOString(),
+        user_id: userId,
+      }
+
+      tables.forEach((tableName, index) => {
+        const res = results[index]
+        if (res.error) {
+          throw new Error(`Error fetching ${tableName}: ${res.error.message}`)
+        }
+        backup[tableName] = res.data || []
+      })
+
+      const json = JSON.stringify(backup, null, 2)
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const dateStr = new Date().toISOString().slice(0, 10)
+      link.href = url
+      link.setAttribute('download', `account-book-backup-${dateStr}.json`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error generating backup:', error)
+      alert('Error generating backup: ' + error.message)
+    } finally {
+      setBackupLoading(false)
     }
   }
 
@@ -305,8 +369,21 @@ function Settings() {
           </div>
           <div>
             <p className="text-gray-600">Data Backup</p>
-            <p className="font-semibold text-green-600">Automatic</p>
+            <p className="font-semibold text-green-600">Automatic + Manual Export</p>
           </div>
+        </div>
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={handleDownloadBackup}
+            disabled={backupLoading}
+            className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {backupLoading ? 'Preparing backup...' : 'Download JSON Backup'}
+          </button>
+          <p className="mt-2 text-xs text-gray-500">
+            Exports your data from Sales, Purchases, Expenses, Assets, Inventory, Sales Returns, Stock Movements, and Expense Categories.
+          </p>
         </div>
       </div>
     </div>
