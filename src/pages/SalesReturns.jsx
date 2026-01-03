@@ -165,17 +165,16 @@ function SalesReturns() {
           }
         }
         
-        const { data: newReturn, error } = await supabase
+        // Our Supabase wrapper's insert already returns the inserted rows (array)
+        const { data: newReturns, error } = await supabase
           .from('sales_returns')
           .insert([{ ...formData, user_id: user.id }])
-          .select()
-          .single()
         
         if (error) throw error
-        if (!newReturn || !newReturn.id) {
-          throw new Error('Return saved but no ID was returned from the database.')
+        if (!newReturns || newReturns.length === 0 || !newReturns[0].id) {
+          throw new Error('Error saving return: could not get ID from database.')
         }
-        returnId = newReturn.id
+        returnId = newReturns[0].id
       }
 
       // Step 2: If an Order ID is provided, find matching sale by order_id and mark as returned
