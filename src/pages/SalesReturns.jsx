@@ -1215,10 +1215,18 @@ function SalesReturns() {
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     required
                     value={formData.quantity}
-                    onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value) || 1})}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        quantity:
+                          e.target.value === ''
+                            ? 0
+                            : parseInt(e.target.value, 10) || 0,
+                      })
+                    }
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                   />
                 </div>
