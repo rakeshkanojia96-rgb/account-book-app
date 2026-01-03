@@ -132,11 +132,6 @@ function SalesReturns() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!formData.order_id) {
-      alert('Order ID is required for reconciliation!')
-      return
-    }
-    
     try {
       if (!user) {
         alert('You must be logged in')
@@ -153,18 +148,20 @@ function SalesReturns() {
         
         if (error) throw error
       } else {
-        // Check if this order_id already has a return
-        const { data: existingReturns, error: checkError } = await supabase
-          .from('sales_returns')
-          .select('id')
-          .eq('order_id', formData.order_id)
-          .eq('user_id', user.id)
-        
-        if (checkError) throw checkError
-        
-        if (existingReturns && existingReturns.length > 0) {
-          alert(`Order ID "${formData.order_id}" already has a return entry! Each order can only have one return.`)
-          return
+        // Check if this order_id already has a return (only when provided)
+        if (formData.order_id) {
+          const { data: existingReturns, error: checkError } = await supabase
+            .from('sales_returns')
+            .select('id')
+            .eq('order_id', formData.order_id)
+            .eq('user_id', user.id)
+          
+          if (checkError) throw checkError
+          
+          if (existingReturns && existingReturns.length > 0) {
+            alert(`Order ID "${formData.order_id}" already has a return entry! Each order can only have one return.`)
+            return
+          }
         }
         
         const { data: newReturn, error } = await supabase
@@ -176,60 +173,62 @@ function SalesReturns() {
         returnId = newReturn[0].id
       }
 
-      // Step 2: Find matching sale by order_id and mark as returned
-      const { data: matchingSales, error: salesError } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('order_id', formData.order_id)
-        .eq('user_id', user.id)
-      
-      if (salesError) throw salesError
-      
-      if (matchingSales && matchingSales.length > 0) {
-        const sale = matchingSales[0]
-        
-        // Mark sale as returned (set returned flag)
-        const { error: updateSaleError } = await supabase
+      // Step 2: If an Order ID is provided, find matching sale by order_id and mark as returned
+      if (formData.order_id) {
+        const { data: matchingSales, error: salesError } = await supabase
           .from('sales')
-          .update({ 
-            is_returned: true,
-            return_id: returnId
-          })
-          .eq('id', sale.id)
+          .select('*')
+          .eq('order_id', formData.order_id)
+          .eq('user_id', user.id)
         
-        if (updateSaleError) throw updateSaleError
+        if (salesError) throw salesError
         
-        // Step 3: Handle inventory based on claim status
-        // Only add stock back if NO claim (item physically returned)
-        // If claim exists (approved/rejected), item is lost/wrong, don't add stock
-        if (formData.claim_status === 'No Claim') {
-          // Add stock back - normal return
-          const { data: inventoryItems, error: invError } = await supabase
-            .from('inventory')
-            .select('*')
-            .ilike('product_name', formData.product_name)
-            .eq('user_id', user.id)
-            .limit(1)
+        if (matchingSales && matchingSales.length > 0) {
+          const sale = matchingSales[0]
           
-          if (invError) throw invError
+          // Mark sale as returned (set returned flag)
+          const { error: updateSaleError } = await supabase
+            .from('sales')
+            .update({ 
+              is_returned: true,
+              return_id: returnId
+            })
+            .eq('id', sale.id)
           
-          if (inventoryItems && inventoryItems.length > 0) {
-            // Update existing inventory
-            const item = inventoryItems[0]
-            const currentStock = Number(item.current_stock) || 0
-            const qty = Number(formData.quantity) || 0
-            const { error: updateInvError } = await supabase
+          if (updateSaleError) throw updateSaleError
+          
+          // Step 3: Handle inventory based on claim status
+          // Only add stock back if NO claim (item physically returned)
+          // If claim exists (approved/rejected), item is lost/wrong, don't add stock
+          if (formData.claim_status === 'No Claim') {
+            // Add stock back - normal return
+            const { data: inventoryItems, error: invError } = await supabase
               .from('inventory')
-              .update({ 
-                current_stock: currentStock + qty
-              })
-              .eq('id', item.id)
+              .select('*')
+              .ilike('product_name', formData.product_name)
+              .eq('user_id', user.id)
+              .limit(1)
             
-            if (updateInvError) throw updateInvError
+            if (invError) throw invError
+            
+            if (inventoryItems && inventoryItems.length > 0) {
+              // Update existing inventory
+              const item = inventoryItems[0]
+              const currentStock = Number(item.current_stock) || 0
+              const qty = Number(formData.quantity) || 0
+              const { error: updateInvError } = await supabase
+                .from('inventory')
+                .update({ 
+                  current_stock: currentStock + qty
+                })
+                .eq('id', item.id)
+              
+              if (updateInvError) throw updateInvError
+            }
+            // If no inventory record exists, we can create one (optional)
           }
-          // If no inventory record exists, we can create one (optional)
+          // If claim exists, don't touch inventory (item lost/damaged)
         }
-        // If claim exists, don't touch inventory (item lost/damaged)
       }
 
       resetForm()
@@ -709,11 +708,10 @@ function SalesReturns() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Order ID *
+                    Order ID (Optional)
                   </label>
                   <input
                     type="text"
-                    required
                     value={formData.order_id}
                     onChange={(e) => setFormData({...formData, order_id: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
