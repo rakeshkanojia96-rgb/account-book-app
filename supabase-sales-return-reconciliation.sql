@@ -6,7 +6,9 @@ ALTER TABLE public.sales_returns
 ADD COLUMN IF NOT EXISTS claim_amount NUMERIC DEFAULT 0,
 ADD COLUMN IF NOT EXISTS claim_status TEXT DEFAULT 'No Claim',
 ADD COLUMN IF NOT EXISTS reconciled BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS net_loss NUMERIC DEFAULT 0;
+ADD COLUMN IF NOT EXISTS net_loss NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS product_cost NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS selling_expenses NUMERIC DEFAULT 0;
 
 -- Comments explaining the fields
 COMMENT ON COLUMN public.sales_returns.claim_amount IS 
@@ -21,6 +23,12 @@ COMMENT ON COLUMN public.sales_returns.reconciled IS
 COMMENT ON COLUMN public.sales_returns.net_loss IS 
 'Net profit/loss after offsetting sale and adding claim (negative = loss, positive = profit)';
 
+COMMENT ON COLUMN public.sales_returns.product_cost IS 
+'Cost of the product';
+
+COMMENT ON COLUMN public.sales_returns.selling_expenses IS 
+'Selling expenses';
+
 -- Add order_id to sales_returns if not exists (for linking)
 ALTER TABLE public.sales_returns 
 ADD COLUMN IF NOT EXISTS order_id TEXT;
@@ -34,7 +42,9 @@ SET
     claim_amount = 0,
     claim_status = 'No Claim',
     reconciled = false,
-    net_loss = return_shipping_fee * -1
+    net_loss = return_shipping_fee * -1,
+    product_cost = 0,
+    selling_expenses = 0
 WHERE claim_amount IS NULL;
 
 -- Create reconciliation view
@@ -54,14 +64,17 @@ SELECT
     s.date as sale_date,
     s.total_amount as sale_amount,
     -- Reconciliation calculation:
-    -- Net Loss = Sale Amount - Return Amount + Claim Amount - Shipping Fee
-    -- If no claim: Loss = Shipping Fee
-    -- If claim: Net = Claim - Shipping Fee (can be profit or loss)
+    -- Net Profit/Loss (claim Approved/Rejected/Pending):
+    --   Claim Amount - (Product Cost + Selling Expenses + Shipping Fee)
+    -- No Claim: Loss = Shipping Fee
     CASE 
-        WHEN sr.claim_amount > 0 THEN 
-            sr.claim_amount - sr.return_shipping_fee
+        WHEN sr.claim_status IS NOT NULL AND sr.claim_status <> 'No Claim' THEN 
+            sr.claim_amount 
+            - COALESCE(sr.product_cost, 0)
+            - COALESCE(sr.selling_expenses, 0)
+            - COALESCE(sr.return_shipping_fee, 0)
         ELSE 
-            sr.return_shipping_fee * -1
+            COALESCE(sr.return_shipping_fee, 0) * -1
     END as net_profit_loss,
     CASE 
         WHEN sr.order_id IS NOT NULL AND s.id IS NOT NULL THEN true
@@ -79,12 +92,15 @@ CREATE OR REPLACE FUNCTION calculate_return_net_loss()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Calculate net profit/loss
-    -- If claim approved: Net = Claim Amount - Shipping Fee
+    -- If claim (Approved/Rejected/Pending): Net = Claim Amount - (Product Cost + Selling Expenses + Shipping Fee)
     -- If no claim: Net Loss = -Shipping Fee
-    IF NEW.claim_amount > 0 THEN
-        NEW.net_loss := NEW.claim_amount - NEW.return_shipping_fee;
+    IF NEW.claim_status IS NOT NULL AND NEW.claim_status <> 'No Claim' THEN
+        NEW.net_loss := NEW.claim_amount 
+            - COALESCE(NEW.product_cost, 0)
+            - COALESCE(NEW.selling_expenses, 0)
+            - COALESCE(NEW.return_shipping_fee, 0);
     ELSE
-        NEW.net_loss := NEW.return_shipping_fee * -1;
+        NEW.net_loss := COALESCE(NEW.return_shipping_fee, 0) * -1;
     END IF;
     
     -- Mark as reconciled if order_id exists
