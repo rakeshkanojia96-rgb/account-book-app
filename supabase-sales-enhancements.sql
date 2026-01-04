@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.sales_returns (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     sale_id UUID REFERENCES public.sales(id) ON DELETE SET NULL,
-    date DATE NOT NULL,
+    return_date DATE NOT NULL,
     invoice_number TEXT,
     customer_name TEXT,
     platform TEXT,
@@ -58,7 +58,7 @@ CREATE POLICY "Users can delete their own sales returns" ON public.sales_returns
 
 -- Create indexes for sales returns
 CREATE INDEX IF NOT EXISTS sales_returns_user_id_idx ON public.sales_returns(user_id);
-CREATE INDEX IF NOT EXISTS sales_returns_date_idx ON public.sales_returns(date);
+CREATE INDEX IF NOT EXISTS sales_returns_return_date_idx ON public.sales_returns(return_date);
 CREATE INDEX IF NOT EXISTS sales_returns_sale_id_idx ON public.sales_returns(sale_id);
 
 -- Create trigger for sales returns
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS public.purchase_returns (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     purchase_id UUID REFERENCES public.purchases(id) ON DELETE SET NULL,
-    date DATE NOT NULL,
+    return_date DATE NOT NULL,
     invoice_number TEXT,
     supplier_name TEXT,
     category TEXT,
