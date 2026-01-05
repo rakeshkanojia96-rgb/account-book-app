@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { supabase } from '../lib/supabase'
 import { Plus, Search, Edit2, Trash2, X, RotateCcw, Copy, Calendar } from 'lucide-react'
-import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, parse, isValid, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import * as XLSX from 'xlsx'
 
 function SalesReturns() {
   const { user } = useUser()
@@ -448,6 +449,443 @@ function SalesReturns() {
     setShowForm(false)
   }
 
+  const parseCsvDate = (value) => {
+    if (!value) return null
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return format(value, 'yyyy-MM-dd')
+    }
+
+    if (typeof value === 'number') {
+      const excelEpoch = new Date(1899, 11, 30)
+      const d = new Date(excelEpoch.getTime() + value * 86400 * 1000)
+      if (!Number.isNaN(d.getTime())) {
+        return format(d, 'yyyy-MM-dd')
+      }
+    }
+
+    if (typeof value === 'string') {
+      const direct = Date.parse(value)
+      if (!Number.isNaN(direct)) {
+        return format(new Date(direct), 'yyyy-MM-dd')
+      }
+
+      let str = value.trim().replace(/\./g, '-').replace(/\//g, '-')
+      const patterns = ['dd-MM-yyyy', 'd-M-yyyy', 'dd-MMM-yyyy', 'd-MMM-yyyy', 'yyyy-MM-dd']
+
+      for (const pattern of patterns) {
+        const parsedDate = parse(str, pattern, new Date())
+        if (isValid(parsedDate)) {
+          return format(parsedDate, 'yyyy-MM-dd')
+        }
+      }
+    }
+
+    return null
+  }
+
+  const handleDownloadReturnsTemplate = () => {
+    const headers = [
+      'date',
+      'order_id',
+      'invoice_number',
+      'customer_name',
+      'platform',
+      'product_name',
+      'quantity',
+      'unit_price',
+      'gst_percentage',
+      'return_shipping_fee',
+      'product_cost',
+      'selling_expenses',
+      'claim_amount',
+      'claim_status',
+      'reason',
+      'notes'
+    ]
+
+    const sampleRow = [
+      '28-01-2023',
+      '148322536915408064_1',
+      'RET-INV-001',
+      'Sample Customer',
+      'Meesho',
+      'Sample Product',
+      '1',
+      '300',
+      '18',
+      '80',
+      '200',
+      '30',
+      '316.56',
+      'Approved',
+      'Wrong item received',
+      'Sample notes (date format dd-mm-yyyy)'
+    ]
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '')
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"'
+      }
+      return str
+    }
+
+    const csvContent =
+      headers.join(',') + '\n' +
+      sampleRow.map(escapeCsv).join(',') + '\n'
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'sales_returns_template.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportReturnsCSV = () => {
+    const rows = (filteredReturns && filteredReturns.length > 0) ? filteredReturns : returns
+
+    if (!rows || rows.length === 0) {
+      alert('No returns to export.')
+      return
+    }
+
+    const headers = [
+      'date',
+      'order_id',
+      'invoice_number',
+      'customer_name',
+      'platform',
+      'product_name',
+      'quantity',
+      'unit_price',
+      'gst_percentage',
+      'return_shipping_fee',
+      'product_cost',
+      'selling_expenses',
+      'claim_amount',
+      'claim_status',
+      'refund_amount',
+      'net_loss',
+      'reason',
+      'notes'
+    ]
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '')
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"'
+      }
+      return str
+    }
+
+    const lines = [headers.join(',')]
+
+    rows.forEach((ret) => {
+      const rawDate = ret.return_date || ret.date || ''
+      let csvDate = ''
+      if (rawDate) {
+        const d = new Date(rawDate)
+        csvDate = Number.isNaN(d.getTime()) ? String(rawDate) : format(d, 'dd-MM-yyyy')
+      }
+
+      const row = [
+        csvDate,
+        ret.order_id || '',
+        ret.invoice_number || '',
+        ret.customer_name || '',
+        ret.platform || '',
+        ret.product_name || '',
+        ret.quantity ?? '',
+        ret.unit_price ?? '',
+        ret.gst_percentage ?? '',
+        ret.return_shipping_fee ?? '',
+        ret.product_cost ?? '',
+        ret.selling_expenses ?? '',
+        ret.claim_amount ?? '',
+        ret.claim_status || '',
+        ret.refund_amount ?? '',
+        ret.net_loss ?? '',
+        ret.reason || '',
+        ret.notes || ''
+      ]
+
+      lines.push(row.map(escapeCsv).join(','))
+    })
+
+    const csvContent = lines.join('\n') + '\n'
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'sales_returns_export.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleUploadReturnsCSV = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!user) {
+      alert('You must be logged in to upload CSVs')
+      event.target.value = ''
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const rows = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const data = e.target?.result
+            const workbook = XLSX.read(data, { type: 'binary' })
+            const sheetName = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[sheetName]
+            const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+            resolve(json)
+          } catch (err) {
+            reject(err)
+          }
+        }
+        reader.onerror = (err) => reject(err)
+        reader.readAsBinaryString(file)
+      })
+
+      const requiredColumns = [
+        'date',
+        'platform',
+        'product_name',
+        'quantity',
+        'unit_price',
+        'gst_percentage',
+        'return_shipping_fee'
+      ]
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        alert('CSV file is empty or could not be read.')
+        return
+      }
+
+      const missingCols = requiredColumns.filter((col) => !(col in rows[0]))
+      if (missingCols.length > 0) {
+        alert('CSV is missing required columns: ' + missingCols.join(', '))
+        return
+      }
+
+      let successCount = 0
+      let errorCount = 0
+      const rowErrors = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        try {
+          const dbDate = parseCsvDate(row.date)
+          if (!dbDate) {
+            const raw = row.date
+            throw new Error(
+              `Invalid date format for "${raw}" (type ${typeof raw}). Use dd-mm-yyyy or dd-MMM-yyyy (e.g. 11-03-2023 or 11-Mar-2023)`
+            )
+          }
+
+          const quantity = Number(row.quantity)
+          const unitPrice = Number(row.unit_price)
+
+          const rawGst = row.gst_percentage === undefined || row.gst_percentage === null
+            ? ''
+            : String(row.gst_percentage).trim().replace('%', '')
+
+          let gstPercentage = rawGst === '' ? 0 : Number(rawGst)
+
+          if (!Number.isNaN(gstPercentage) && gstPercentage > 0 && gstPercentage <= 1) {
+            gstPercentage = gstPercentage * 100
+          }
+
+          const shippingFee = row.return_shipping_fee === undefined || row.return_shipping_fee === null
+            ? 0
+            : Number(row.return_shipping_fee)
+
+          const productCost = row.product_cost === undefined || row.product_cost === null
+            ? 0
+            : Number(row.product_cost)
+
+          const sellingExpenses = row.selling_expenses === undefined || row.selling_expenses === null
+            ? 0
+            : Number(row.selling_expenses)
+
+          const claimAmount = row.claim_amount === undefined || row.claim_amount === null
+            ? 0
+            : Number(row.claim_amount)
+
+          if (!row.product_name) {
+            throw new Error('product_name is required')
+          }
+
+          if ([
+            quantity,
+            unitPrice,
+            gstPercentage,
+            shippingFee,
+            productCost,
+            sellingExpenses,
+            claimAmount
+          ].some(v => Number.isNaN(v))) {
+            throw new Error('quantity, unit_price, gst_percentage, return_shipping_fee, product_cost, selling_expenses, and claim_amount must be numbers')
+          }
+
+          const baseAmount = quantity * unitPrice
+          const gstAmount = baseAmount * (gstPercentage / 100)
+          const totalAmount = baseAmount + gstAmount
+          const refundAmount = totalAmount - shippingFee
+
+          const claimStatusRaw = (row.claim_status || '').trim()
+          const claimStatus = claimStatusRaw || 'No Claim'
+          const totalLoss = productCost + sellingExpenses + shippingFee
+          const hasClaim = claimStatus && claimStatus !== 'No Claim'
+          const netLoss = hasClaim ? (claimAmount - totalLoss) : (shippingFee * -1)
+
+          const orderId = row.order_id || ''
+
+          if (orderId) {
+            const { data: existingReturns, error: checkError } = await supabase
+              .from('sales_returns')
+              .select('id')
+              .eq('order_id', orderId)
+              .eq('user_id', user.id)
+
+            if (checkError) throw checkError
+
+            if (existingReturns && existingReturns.length > 0) {
+              throw new Error(`Order ID "${orderId}" already has a return entry! Each order can only have one return.`)
+            }
+          }
+
+          const returnRecord = {
+            return_date: dbDate,
+            sale_id: null,
+            order_id: orderId,
+            invoice_number: row.invoice_number || '',
+            customer_name: row.customer_name || '',
+            platform: row.platform || '',
+            product_name: row.product_name,
+            quantity,
+            unit_price: unitPrice,
+            gst_percentage: gstPercentage,
+            amount: parseFloat(baseAmount.toFixed(2)),
+            gst_amount: parseFloat(gstAmount.toFixed(2)),
+            total_amount: parseFloat(totalAmount.toFixed(2)),
+            return_shipping_fee: parseFloat(shippingFee.toFixed(2)),
+            product_cost: parseFloat(productCost.toFixed(2)),
+            selling_expenses: parseFloat(sellingExpenses.toFixed(2)),
+            refund_amount: parseFloat(refundAmount.toFixed(2)),
+            claim_amount: parseFloat(claimAmount.toFixed(2)),
+            claim_status: claimStatus,
+            net_loss: parseFloat(netLoss.toFixed(2)),
+            reason: row.reason || '',
+            notes: row.notes || ''
+          }
+
+          const { data: newReturn, error: insertError } = await supabase
+            .from('sales_returns')
+            .insert([{ ...returnRecord, user_id: user.id }])
+            .select('*')
+
+          if (insertError) throw insertError
+
+          const inserted = newReturn && newReturn[0]
+          const returnId = inserted?.id
+
+          if (orderId && returnId) {
+            const { data: matchingSales, error: salesError } = await supabase
+              .from('sales')
+              .select('*')
+              .eq('order_id', orderId)
+              .eq('user_id', user.id)
+
+            if (salesError) throw salesError
+
+            if (matchingSales && matchingSales.length > 0) {
+              const sale = matchingSales[0]
+              const { error: updateSaleError } = await supabase
+                .from('sales')
+                .update({ 
+                  is_returned: true,
+                  return_id: returnId
+                })
+                .eq('id', sale.id)
+
+              if (updateSaleError) throw updateSaleError
+
+              if (claimStatus === 'No Claim') {
+                const { data: inventoryItems, error: invError } = await supabase
+                  .from('inventory')
+                  .select('*')
+                  .ilike('product_name', row.product_name)
+                  .eq('user_id', user.id)
+                  .limit(1)
+
+                if (invError) throw invError
+
+                if (inventoryItems && inventoryItems.length > 0) {
+                  const item = inventoryItems[0]
+                  const currentStock = Number(item.current_stock) || 0
+                  const qty = Number(quantity) || 0
+                  const { error: updateInvError } = await supabase
+                    .from('inventory')
+                    .update({ 
+                      current_stock: currentStock + qty
+                    })
+                    .eq('id', item.id)
+
+                  if (updateInvError) throw updateInvError
+                }
+              }
+            }
+          }
+
+          successCount++
+        } catch (rowError) {
+          console.error('Error importing return row', i + 2, rowError)
+          rowErrors.push({
+            rowNumber: i + 2,
+            message: rowError?.message || String(rowError)
+          })
+          errorCount++
+        }
+      }
+
+      let message = `CSV import complete. Imported: ${successCount}, Failed: ${errorCount}`
+
+      if (rowErrors.length > 0) {
+        const preview = rowErrors
+          .slice(0, 5)
+          .map((e) => `Row ${e.rowNumber}: ${e.message}`)
+          .join('\n')
+        message += `\n\nDetails (first ${Math.min(5, rowErrors.length)} errors):\n${preview}`
+        if (rowErrors.length > 5) {
+          message += `\n...and ${rowErrors.length - 5} more.`
+        }
+      }
+
+      alert(message)
+      fetchReturns()
+    } catch (error) {
+      console.error('Error processing returns CSV:', error)
+      alert('Error processing returns CSV: ' + error.message)
+    } finally {
+      setLoading(false)
+      event.target.value = ''
+    }
+  }
+
   const isWithinDateFilter = (dateStr) => {
     if (dateFilter === 'all') return true
     if (!dateStr) return false
@@ -520,13 +958,38 @@ function SalesReturns() {
           <h2 className="text-2xl font-bold text-gray-900">Sales Returns</h2>
           <p className="text-gray-600">Manage product returns and refunds</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Return</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadReturnsTemplate}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+          >
+            Download CSV Template
+          </button>
+          <label className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm cursor-pointer">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUploadReturnsCSV}
+              className="hidden"
+            />
+            Upload CSV
+          </label>
+          <button
+            type="button"
+            onClick={handleExportReturnsCSV}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Return</span>
+          </button>
+        </div>
       </div>
 
       {/* Search and Stats */}
@@ -687,7 +1150,6 @@ function SalesReturns() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <span className={Number(returnItem.net_loss) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {Number(returnItem.net_loss) >= 0 ? 'Profit ' : 'Loss '}
                         ₹{Math.abs(Number(returnItem.net_loss) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
