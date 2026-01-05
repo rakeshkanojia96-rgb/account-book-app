@@ -318,6 +318,8 @@ function SalesReturns() {
       gst_amount: Number(returnItem.gst_amount || 0),
       total_amount: Number(returnItem.total_amount || 0),
       return_shipping_fee: Number(returnItem.return_shipping_fee || 0),
+      product_cost: Number(returnItem.product_cost || 0),
+      selling_expenses: Number(returnItem.selling_expenses || 0),
       refund_amount: Number(returnItem.refund_amount || 0),
       claim_amount: Number(returnItem.claim_amount || 0),
       claim_status: returnItem.claim_status || 'No Claim',
@@ -493,9 +495,12 @@ function SalesReturns() {
   }
 
   const filteredReturns = returns.filter(ret => {
-    const matchesSearch = ret.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ret.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ret.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    const term = searchTerm.toLowerCase()
+    const matchesSearch =
+      ret.customer_name?.toLowerCase().includes(term) ||
+      ret.invoice_number?.toLowerCase().includes(term) ||
+      ret.product_name?.toLowerCase().includes(term) ||
+      (ret.order_id && String(ret.order_id).toLowerCase().includes(term))
     const returnDate = ret.return_date || ret.date
     const matchesDate = isWithinDateFilter(returnDate)
     return matchesSearch && matchesDate
@@ -622,10 +627,14 @@ function SalesReturns() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Cost</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selling Exp</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Claim Amt</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Refund</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit/Loss</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -657,15 +666,30 @@ function SalesReturns() {
                       })()}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {returnItem.customer_name}
-                      {returnItem.invoice_number && (
-                        <p className="text-xs text-gray-500">{returnItem.invoice_number}</p>
+                      {returnItem.platform || '-'}
+                      {returnItem.order_id && (
+                        <p className="text-xs text-gray-500">Order: {returnItem.order_id}</p>
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{returnItem.product_name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{returnItem.quantity}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ₹{(Number(returnItem.product_cost) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ₹{(Number(returnItem.selling_expenses) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-700">
+                      ₹{(Number(returnItem.claim_amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
-                      ₹{returnItem.refund_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                      ₹{(Number(returnItem.refund_amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <span className={Number(returnItem.net_loss) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {Number(returnItem.net_loss) >= 0 ? 'Profit ' : 'Loss '}
+                        ₹{Math.abs(Number(returnItem.net_loss) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">{returnItem.reason || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
