@@ -31,6 +31,8 @@ function SalesReturns() {
     gst_amount: 0,
     total_amount: 0,
     return_shipping_fee: 0,
+    product_cost: 0,
+    selling_expenses: 0,
     refund_amount: 0,
     claim_amount: 0,
     claim_status: 'No Claim',
@@ -51,13 +53,17 @@ function SalesReturns() {
     const totalAmount = baseAmount + gstAmount
     const shippingFee = formData.return_shipping_fee || 0
     const netRefund = totalAmount - shippingFee
-    
+
     // Calculate net loss/profit
-    // If claim approved: Net = Claim - Shipping Fee (can be positive/negative)
+    // If claim (Approved/Rejected/Pending): Net = Claim - (Product Cost + Selling Expenses + Shipping Fee)
     // If no claim: Net Loss = -Shipping Fee
     const claimAmount = formData.claim_amount || 0
-    const netLoss = claimAmount > 0 ? (claimAmount - shippingFee) : (shippingFee * -1)
-    
+    const productCost = formData.product_cost || 0
+    const sellingExpenses = formData.selling_expenses || 0
+    const totalLoss = productCost + sellingExpenses + shippingFee
+    const hasClaim = formData.claim_status && formData.claim_status !== 'No Claim'
+    const netLoss = hasClaim ? (claimAmount - totalLoss) : (shippingFee * -1)
+
     setFormData(prev => ({
       ...prev,
       amount: parseFloat(baseAmount.toFixed(2)),
@@ -66,7 +72,16 @@ function SalesReturns() {
       refund_amount: parseFloat(netRefund.toFixed(2)),
       net_loss: parseFloat(netLoss.toFixed(2))
     }))
-  }, [formData.quantity, formData.unit_price, formData.gst_percentage, formData.return_shipping_fee, formData.claim_amount])
+  }, [
+    formData.quantity,
+    formData.unit_price,
+    formData.gst_percentage,
+    formData.return_shipping_fee,
+    formData.claim_amount,
+    formData.product_cost,
+    formData.selling_expenses,
+    formData.claim_status
+  ])
 
   const fetchReturns = async () => {
     try {
@@ -274,6 +289,8 @@ function SalesReturns() {
       gst_amount: returnItem.gst_amount || 0,
       total_amount: returnItem.total_amount || 0,
       return_shipping_fee: returnItem.return_shipping_fee || 0,
+      product_cost: returnItem.product_cost || 0,
+      selling_expenses: returnItem.selling_expenses || 0,
       refund_amount: returnItem.refund_amount || 0,
       claim_amount: returnItem.claim_amount || 0,
       claim_status: returnItem.claim_status || 'No Claim',
@@ -416,6 +433,8 @@ function SalesReturns() {
       gst_amount: 0,
       total_amount: 0,
       return_shipping_fee: 0,
+      product_cost: 0,
+      selling_expenses: 0,
       refund_amount: 0,
       claim_amount: 0,
       claim_status: 'No Claim',
@@ -917,6 +936,34 @@ function SalesReturns() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Cost (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.product_cost}
+                    onChange={(e) => setFormData({...formData, product_cost: parseFloat(e.target.value) || 0})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selling Expenses (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.selling_expenses}
+                    onChange={(e) => setFormData({...formData, selling_expenses: parseFloat(e.target.value) || 0})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Return Reason
                   </label>
                   <select
@@ -977,7 +1024,23 @@ function SalesReturns() {
                 {/* Reconciliation Section */}
                 <div className="border-t-2 border-gray-300 pt-2 mt-2">
                   <p className="text-xs font-semibold text-gray-600 mb-2">📊 Reconciliation:</p>
-                  {formData.claim_amount > 0 && (
+                  {(formData.product_cost > 0 || formData.selling_expenses > 0) && (
+                    <>
+                      {formData.product_cost > 0 && (
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>(-) Product Cost:</span>
+                          <span>₹{formData.product_cost.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                        </div>
+                      )}
+                      {formData.selling_expenses > 0 && (
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>(-) Selling Expenses:</span>
+                          <span>₹{formData.selling_expenses.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {formData.claim_status && formData.claim_status !== 'No Claim' && (
                     <div className="flex justify-between text-sm text-blue-600">
                       <span>(+) Claim Amount:</span>
                       <span>₹{formData.claim_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
@@ -988,8 +1051,8 @@ function SalesReturns() {
                     <span>₹{Math.abs(formData.net_loss).toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 italic">
-                    {formData.claim_amount > 0 
-                      ? `Claim ₹${formData.claim_amount.toFixed(2)} - Shipping ₹${formData.return_shipping_fee.toFixed(2)} = ${formData.net_loss >= 0 ? 'Profit' : 'Loss'} ₹${Math.abs(formData.net_loss).toFixed(2)}`
+                    {formData.claim_status && formData.claim_status !== 'No Claim'
+                      ? `Claim ₹${formData.claim_amount.toFixed(2)} - (Cost ₹${formData.product_cost.toFixed(2)} + Selling ₹${formData.selling_expenses.toFixed(2)} + Shipping ₹${formData.return_shipping_fee.toFixed(2)}) = ${formData.net_loss >= 0 ? 'Profit' : 'Loss'} ₹${Math.abs(formData.net_loss).toFixed(2)}`
                       : `Loss = Shipping Fee ₹${formData.return_shipping_fee.toFixed(2)}`
                     }
                   </p>
