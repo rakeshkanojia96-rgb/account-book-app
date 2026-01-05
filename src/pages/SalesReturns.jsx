@@ -16,6 +16,7 @@ function SalesReturns() {
   const [dateFilter, setDateFilter] = useState('all')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
   
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -64,7 +65,9 @@ function SalesReturns() {
     const sellingExpenses = formData.selling_expenses || 0
     const totalLoss = productCost + sellingExpenses + shippingFee
     const hasClaim = formData.claim_status && formData.claim_status !== 'No Claim'
-    const netLoss = hasClaim ? (claimAmount - totalLoss) : (shippingFee * -1)
+    const netLoss = hasClaim
+      ? (claimAmount - totalLoss)
+      : ((sellingExpenses + shippingFee) * -1)
 
     setFormData(prev => ({
       ...prev,
@@ -335,13 +338,19 @@ function SalesReturns() {
     setShowForm(true)
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this return? This will reverse the return and restore the original sale.')) return
+  const handleDelete = async (id, options = {}) => {
+    const { skipConfirm = false, silent = false } = options
+
+    if (!skipConfirm) {
+      if (!confirm('Are you sure you want to delete this return? This will reverse the return and restore the original sale.')) return
+    }
 
     try {
       if (!user) {
-        alert('You must be logged in')
-        return
+        if (!silent) {
+          alert('You must be logged in')
+        }
+        throw new Error('User not logged in')
       }
       
       // Step 1: Get the return record before deleting
@@ -411,15 +420,66 @@ function SalesReturns() {
         .eq('id', id)
 
       if (deleteError) throw deleteError
-      
-      fetchReturns()
-      alert('Return deleted successfully! Sale has been restored.' +
-        (returnRecord.claim_status === 'No Claim' 
-          ? ' Stock has been adjusted back.' 
-          : ''))
+
+      if (!silent) {
+        fetchReturns()
+        alert('Return deleted successfully! Sale has been restored.' +
+          (returnRecord.claim_status === 'No Claim' 
+            ? ' Stock has been adjusted back.' 
+            : ''))
+      }
     } catch (error) {
       console.error('Error deleting return:', error)
-      alert('Error deleting return: ' + error.message)
+      if (!silent) {
+        alert('Error deleting return: ' + error.message)
+      } else {
+        throw error
+      }
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      alert('No returns selected for deletion.')
+      return
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected returns? This will reverse the returns and restore the original sales where applicable.`)) {
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      let successCount = 0
+      let errorCount = 0
+      const errors = []
+
+      for (const id of selectedIds) {
+        try {
+          await handleDelete(id, { skipConfirm: true, silent: true })
+          successCount++
+        } catch (err) {
+          errorCount++
+          errors.push(err?.message || String(err))
+        }
+      }
+
+      await fetchReturns()
+      setSelectedIds([])
+
+      let message = `Bulk delete complete. Deleted: ${successCount}, Failed: ${errorCount}`
+
+      if (errors.length > 0) {
+        const preview = errors
+          .slice(0, 3)
+          .join('\n')
+        message += `\n\nFirst errors:\n${preview}`
+      }
+
+      alert(message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -753,7 +813,9 @@ function SalesReturns() {
           const claimStatus = claimStatusRaw || 'No Claim'
           const totalLoss = productCost + sellingExpenses + shippingFee
           const hasClaim = claimStatus && claimStatus !== 'No Claim'
-          const netLoss = hasClaim ? (claimAmount - totalLoss) : (shippingFee * -1)
+          const netLoss = hasClaim
+            ? (claimAmount - totalLoss)
+            : ((sellingExpenses + shippingFee) * -1)
 
           const orderId = row.order_id || ''
 
@@ -942,6 +1004,34 @@ function SalesReturns() {
     return matchesSearch && matchesDate
   })
 
+  const allVisibleSelected = filteredReturns.length > 0 &&
+    filteredReturns.every(ret => selectedIds.includes(ret.id))
+
+  const toggleSelectReturn = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id)
+        ? prev.filter(existingId => existingId !== id)
+        : [...prev, id]
+    )
+  }
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredReturns.map(ret => ret.id)
+    if (visibleIds.length === 0) return
+
+    const allSelected = visibleIds.every(id => selectedIds.includes(id))
+
+    if (allSelected) {
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)))
+    } else {
+      setSelectedIds(prev => {
+        const set = new Set(prev)
+        visibleIds.forEach(id => set.add(id))
+        return Array.from(set)
+      })
+    }
+  }
+
   // Calculate reconciliation summary (cast NUMERIC strings to numbers)
   const totalReturnAmount = filteredReturns.reduce((sum, ret) => sum + (Number(ret.total_amount) || 0), 0)
   const totalShippingFees = filteredReturns.reduce((sum, ret) => sum + (Number(ret.return_shipping_fee) || 0), 0)
@@ -980,6 +1070,15 @@ function SalesReturns() {
           >
             Export CSV
           </button>
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="inline-flex items-center px-3 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition text-sm"
+            >
+              Delete Selected ({selectedIds.length})
+            </button>
+          )}
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition"
@@ -1087,6 +1186,13 @@ function SalesReturns() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
@@ -1103,13 +1209,13 @@ function SalesReturns() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="12" className="px-6 py-12 text-center text-gray-500">
                     Loading returns...
                   </td>
                 </tr>
               ) : filteredReturns.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="12" className="px-6 py-12 text-center text-gray-500">
                     <RotateCcw className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No returns found</p>
                   </td>
@@ -1117,6 +1223,13 @@ function SalesReturns() {
               ) : (
                 filteredReturns.map((returnItem) => (
                   <tr key={returnItem.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(returnItem.id)}
+                        onChange={() => toggleSelectReturn(returnItem.id)}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {(() => {
                         const rawDate = returnItem.return_date || returnItem.date
