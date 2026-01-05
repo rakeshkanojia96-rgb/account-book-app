@@ -796,20 +796,13 @@ function SalesReturns() {
             notes: row.notes || ''
           }
 
-          const { data: newReturn, error: insertError } = await supabase
+          const { error: insertError } = await supabase
             .from('sales_returns')
             .insert([{ ...returnRecord, user_id: user.id }])
-            .select('*')
 
           if (insertError) throw insertError
-          if (!newReturn || newReturn.length === 0) {
-            throw new Error('Insert did not return the new sales return record')
-          }
 
-          const inserted = newReturn[0]
-          const returnId = inserted.id
-
-          if (orderId && returnId) {
+          if (orderId) {
             const { data: matchingSales, error: salesError } = await supabase
               .from('sales')
               .select('*')
@@ -823,8 +816,7 @@ function SalesReturns() {
               const { error: updateSaleError } = await supabase
                 .from('sales')
                 .update({ 
-                  is_returned: true,
-                  return_id: returnId
+                  is_returned: true
                 })
                 .eq('id', sale.id)
 
