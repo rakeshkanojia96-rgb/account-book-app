@@ -43,9 +43,10 @@ function SalesReturns() {
   })
 
   useEffect(() => {
+    if (!user) return
     fetchReturns()
     fetchSales()
-  }, [])
+  }, [user])
 
   useEffect(() => {
     // Auto-calculate amounts
@@ -87,7 +88,9 @@ function SalesReturns() {
   const fetchReturns = async () => {
     try {
       if (!user) return
-      
+
+      setLoading(true)
+
       const { data, error } = await supabase
         .from('sales_returns')
         .select('*')
@@ -799,9 +802,12 @@ function SalesReturns() {
             .select('*')
 
           if (insertError) throw insertError
+          if (!newReturn || newReturn.length === 0) {
+            throw new Error('Insert did not return the new sales return record')
+          }
 
-          const inserted = newReturn && newReturn[0]
-          const returnId = inserted?.id
+          const inserted = newReturn[0]
+          const returnId = inserted.id
 
           if (orderId && returnId) {
             const { data: matchingSales, error: salesError } = await supabase
