@@ -1004,6 +1004,22 @@ function SalesReturns() {
     return matchesSearch && matchesDate
   })
 
+  const computeNetLoss = (ret) => {
+    const shippingFee = Number(ret.return_shipping_fee) || 0
+    const sellingExpenses = Number(ret.selling_expenses) || 0
+    const productCost = Number(ret.product_cost) || 0
+    const claimAmount = Number(ret.claim_amount) || 0
+    const claimStatus = ret.claim_status || 'No Claim'
+
+    const totalLoss = productCost + sellingExpenses + shippingFee
+    const hasClaim = claimStatus && claimStatus !== 'No Claim'
+    const netLossValue = hasClaim
+      ? (claimAmount - totalLoss)
+      : ((sellingExpenses + shippingFee) * -1)
+
+    return Number.isFinite(netLossValue) ? netLossValue : 0
+  }
+
   const allVisibleSelected = filteredReturns.length > 0 &&
     filteredReturns.every(ret => selectedIds.includes(ret.id))
 
@@ -1036,7 +1052,7 @@ function SalesReturns() {
   const totalReturnAmount = filteredReturns.reduce((sum, ret) => sum + (Number(ret.total_amount) || 0), 0)
   const totalShippingFees = filteredReturns.reduce((sum, ret) => sum + (Number(ret.return_shipping_fee) || 0), 0)
   const totalClaimAmount = filteredReturns.reduce((sum, ret) => sum + (Number(ret.claim_amount) || 0), 0)
-  const netLoss = filteredReturns.reduce((sum, ret) => sum + (Number(ret.net_loss) || 0), 0)
+  const netLoss = filteredReturns.reduce((sum, ret) => sum + computeNetLoss(ret), 0)
 
   return (
     <div className="space-y-6">
@@ -1260,8 +1276,8 @@ function SalesReturns() {
                       ₹{(Number(returnItem.refund_amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <span className={Number(returnItem.net_loss) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        ₹{Math.abs(Number(returnItem.net_loss) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <span className={computeNetLoss(returnItem) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        ₹{Math.abs(computeNetLoss(returnItem)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">{returnItem.reason || '-'}</td>
